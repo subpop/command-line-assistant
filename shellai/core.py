@@ -38,7 +38,8 @@ def ask(config: dict[str, Any]) -> str:
         system_role_content = DEFAULT_SYSTEM_ROLE.format(
             OS_NAME=config["OS_NAME"], CODE_BLOCK_TAG=config["CODE_BLOCK_TAG"])
 
-    system_role: list[Any] = [{"role": "system", "content": system_role_content}]
+    #system_role: list[Any] = [{"role": "system", "content": system_role_content}]
+    system_role = []
 
     # we will build this context as we go, depending on the current context state
     context: list[Any] = []
@@ -160,7 +161,7 @@ def ask(config: dict[str, Any]) -> str:
 
     # Make the POST request
     response = requests.post(
-        "http://0.0.0.0:8000/api/v1/query/", # TODO: move to config
+        "http://0.0.0.0:8082/api/v1/query/", # TODO: move to config
         headers={"Content-Type": "application/json"},
         data=dumps(payload),
         timeout=30 # waiting for more than 30 seconds does not make sense
@@ -172,8 +173,7 @@ def ask(config: dict[str, Any]) -> str:
         completion = response.json()
         print(f"completion: {completion}")
         data = completion.get("data", None)
-        if data:
-            answer: Optional[str] = data.get("response", None)
+        answer = data
     else:
         answer: Optional[str] = None
 
@@ -193,21 +193,17 @@ def ask(config: dict[str, Any]) -> str:
         total_tokens: int = input_tokens + output_tokens
         total_tokens_cost: float = input_tokens_cost + output_tokens_cost
         dbg_print(
-            f"[input tokens]: {input_tokens},
-            [cost]: {'${:.6f}'.format(input_tokens_cost)}", color="green")
+            f"[input tokens]: {input_tokens}, [cost]: {'${:.6f}'.format(input_tokens_cost)}", color="green")
         dbg_print(
-            f"[output tokens]: {output_tokens},
-            [cost]: {'${:.6f}'.format(output_tokens_cost)}", color="green")
+            f"[output tokens]: {output_tokens}, [cost]: {'${:.6f}'.format(output_tokens_cost)}", color="green")
         dbg_print(
-            f"[total tokens]: {total_tokens},
-            [cost]: {'${:.6f}'.format(total_tokens_cost)}", color="green")
+            f"[total tokens]: {total_tokens}, [cost]: {'${:.6f}'.format(total_tokens_cost)}", color="green")
 
     # the TOKEN_INLINE_EXECUTION at the end of argv means that we will go straight into code execution
     inplace_command_executed = False
     cmd_stdout: str = "" # these are outside of if block because we want to use it later to append output to context
     if len(input_argv) > 1 and f"{input_argv[-1]}{input_argv[-2]}" == config['TOKEN_INLINE_EXECUTION']:
         cmd_call(f"{answer} | tee {config['CMD_CALL_OUTPUT_TMP_FILE']}")
-
 
         if os.path.exists(config['CMD_CALL_OUTPUT_TMP_FILE']):
             # NOTE: not sure how to handle when the md_call_output_tmp_file
@@ -294,7 +290,7 @@ def cmd_call_output_to_context(command: str, context_file_path, cmd_call_output_
         for item in context:
             dbg_print(f"[context]: {item}", color="green")
 
-def run(client, config) -> None:
+def run(config) -> None:
     # if there is any code to be executed we do it right now, so we can exit right after
     if os.path.exists(config["CODE_BLOCKS_FILE"]) and os.path.getsize(config["CODE_BLOCKS_FILE"]) != 0:
         with open(config["CODE_BLOCKS_FILE"], "rt") as code_blocks_fd_r:
