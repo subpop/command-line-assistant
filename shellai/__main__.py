@@ -1,12 +1,7 @@
 import argparse
 import os
-<<<<<<< HEAD
-=======
 import typing as t
->>>>>>> 321324a18da15045597cef192f60af745d35b08f
 
-from dotenv import load_dotenv
-from openai import OpenAI
 from distro import name
 from sys import stdin
 
@@ -24,9 +19,6 @@ def load_config() -> dict[str, t.Any]:
     home_dir: str = os.path.expanduser("~")
     config_dir: str= os.path.join(home_dir, ".config/shellai")
     os.makedirs(config_dir, exist_ok=True)
-
-    # openai api key has to be in stored in a format: OPENAI_API_KEY=key
-    load_dotenv(f"{config_dir}/openai_api_key", verbose=True)
 
     conf_dict = {
         "MODEL": "gpt-3.5-turbo",
@@ -126,13 +118,7 @@ def main() -> None:
     # Print debug infor about used args
     dbg_print(f"[args]: {args}", color="green")
 
-    if args.openai_base_url:
-        client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"), base_url=args.openai_base_url)
-        dbg_print(f"[Using custom OpenAI base URL] {args.openai_base_url}", color="red")
-    else:
-        client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-
-    run(client, conf_dict)
+    run(conf_dict)
 
 if __name__ == "__main__":
     main()
