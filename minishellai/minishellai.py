@@ -65,10 +65,34 @@ def start_script_session(shellai_tmp_file) -> None:
         logging.info(f"Removing {shellai_tmp_file}")
         os.remove(shellai_tmp_file)
 
+def handle_caret(query: str, config:dict) -> str:
+    """
+    Replaces caret (^) with command output specified in config file.
+    """
+    if '^' not in query:
+        return query
+
+    output_capture_settings = config.get('output_capture_settings', {})
+    captured_output_file = output_capture_settings.get('captured_output_file', '/tmp/minishellai_output.txt')
+
+    if not os.path.exists(captured_output_file):
+        logging.error(f"Output file {captured_output_file} does not exist, change location of file in config to use '^'.")
+        exit(1)
+
+    prompt_separator = output_capture_settings.get('prompt_separator', '$')
+    with open(captured_output_file, 'r') as f:
+        # NOTE: takes only last command + output from file
+        output = f.read().split(prompt_separator)[-1].strip()
+    query = query.replace('^', "")
+    query = f"Context data: {output}\nQuestion: " + query
+    return query
+
 
 def handle_query(query: str, config: dict) -> None:
-    logging.info("Waiting for response from AI...")
-    payload = get_payload(query)
+    query = handle_caret(query, config)
+    # NOTE: Add more query handling here
+
+    logging.info(f"Query:\n{query}")
 
     backend_service = config.get('backend_service', {})
     query_endpoint = backend_service.get('query_endpoint', 'http://0.0.0.0:8080/api/v1/query/')
@@ -77,9 +101,10 @@ def handle_query(query: str, config: dict) -> None:
         response = requests.post(
             query_endpoint,
             headers = {"Content-Type": "application/json"},
-            data = json.dumps(payload),
+            data = json.dumps(get_payload(query)),
             timeout = 30 # waiting for more than 30 seconds does not make sense
         )
+        logging.info("Waiting for response from AI...")
     except requests.exceptions.RequestException as e:
         logging.error(f"Failed to get response from AI: {e}")
         exit(1)
@@ -132,6 +157,5 @@ if __name__ == "__main__":
             print(f"Usage: {sys.argv[0]} <'record'|query-like-string>", file=sys.stderr)
             exit(1)
 
-        logging.info(f"Query: {query}")
         handle_query(query, config)
 

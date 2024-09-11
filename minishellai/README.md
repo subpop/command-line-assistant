@@ -21,8 +21,6 @@ output_capture: # if '^' is used, last command output will be used for query con
 backend_service:
   # proxy: http://todo:8080
   query_endpoint: http://0.0.0.0:8082/api/v1/query/
-
-
 ```
 
 ## Example queries
@@ -37,4 +35,12 @@ python3 minishellai.py "How to uninstall RHEL?"
 
 echo "How to uninstall RHEL?" | python3 minishellai.py
 echo "How to uninstall RHEL?" | python3 minishellai.py "Text that will be appended to the stdin"
+
+# Use caret '^' to use last command output as query context
+python3 miiishellai.py "How to uninstall RHEL? ^"
+# Tool then takes a look at config.yaml to see if output_file exists
+# The query then is in following format:
+# 2024-09-11 14:27:01,667 - INFO - Query:
+# Context data: context text from file specified in config
+# Question: How to uninstall RHEL?
 ```
