@@ -1,11 +1,11 @@
 import json
-import requests
-import select
-import os
-import sys
 import logging
-import yaml
+import os
+import select
+import sys
 
+import requests
+import yaml
 
 logging.basicConfig(
     level=logging.INFO,
