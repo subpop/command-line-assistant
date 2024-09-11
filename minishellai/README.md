@@ -10,5 +10,10 @@ Set up the core-backend [via local-dev-env](https://gitlab.cee.redhat.com/rhel-l
 python3 minishellai.py init
 python3 minishellai.py "How to uninstall RHEL?"
 
+# OR with stdin
+
+echo "How to uninstall RHEL?" | python3 minishellai.py
+echo "How to uninstall RHEL?" | python3 minishellai.py "Text that will be appended to the stdin"
+
 # core-backend service must run to get answer from RAG
 ```

@@ -15,7 +15,7 @@ logging.basicConfig(
 )
 
 
-def get_payload(query:str) -> dict:
+def get_payload(query:str, stdin:str = None) -> dict:
      # Payload "msg" has to have the following structure. It is important that
     # roles of "user" and "assistant" are alternating. Role of "user" is always
     # first.
@@ -70,19 +70,33 @@ def handle_query(query: str) -> None:
 
 if __name__ == "__main__":
     args = sys.argv[1:]
+    query = None
 
-    if not args:
-        print(f"Usage: {sys.argv[0]} <'init'|query-like-string>", file=sys.stderr)
+    if input_data := sys.stdin.read():
+        logging.info("stdin detected")
+        query = input_data.strip()
+
+    if not args and query is None:
+        print(f"Usage: {sys.argv[0]} <'record'|query-like-string>", file=sys.stderr)
         exit(1)
 
-    if args[0] != 'init' and not os.path.exists(SHELLAI_CAPTURED_FILE):
+    if args and args[0] != 'record' and not os.path.exists(SHELLAI_CAPTURED_FILE):
         # TODO config option, ignore script if specifically set to false
-        print(f"Please call `{sys.argv[0]} init` first to initialize script session.", file=sys.stderr)
+        print(f"Please call `{sys.argv[0]} record` first to initialize script session.", file=sys.stderr)
         exit(1)
 
-    if args[0] == 'init':
+    if args and args[0] == 'record':
         start_script_session()
     else:
-        logging.info(f"Query: {''.join(args)}")
-        handle_query(''.join(args))
+        arg_query = ''.join(args)
+        if arg_query:
+            if query is not None:
+                query += '\n' + arg_query
+            else:
+                query = arg_query
+        else:
+            print(f"Usage: {sys.argv[0]} <'record'|query-like-string>", file=sys.stderr)
+
+        logging.info(f"Query: {query}")
+        handle_query(query)
 
