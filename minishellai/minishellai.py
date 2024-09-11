@@ -1,10 +1,11 @@
 import json
 import requests
+import select
 import os
 import sys
 import logging
+import yaml
 
-SHELLAI_CAPTURED_FILE = "minishellai_captured"
 
 logging.basicConfig(
     level=logging.INFO,
@@ -15,7 +16,24 @@ logging.basicConfig(
 )
 
 
-def get_payload(query:str, stdin:str = None) -> dict:
+def read_stdin():
+    # Check if there's input available on stdin
+    if select.select([sys.stdin], [], [], 0.0)[0]:
+        # If there is input, read it
+        input_data = sys.stdin.read().strip()
+        return input_data
+    # If no input, return None or handle as you prefer
+    return None
+
+def read_yaml_config(config_file: str) -> dict:
+    if not os.path.exists(config_file):
+        print(f"Config file {config_file} does not exist (use env 'SHELLAI_CONFIG' to change destination).", file=sys.stderr)
+        return {}
+    with open(config_file, 'r') as f:
+        logging.info(f"Reading config file {config_file}")
+        return yaml.safe_load(f)
+
+def get_payload(query:str) -> dict:
      # Payload "msg" has to have the following structure. It is important that
     # roles of "user" and "assistant" are alternating. Role of "user" is always
     # first.
@@ -31,32 +49,40 @@ def get_payload(query:str, stdin:str = None) -> dict:
     }
     return payload
 
-def start_script_session() -> None:
+
+def start_script_session(shellai_tmp_file) -> None:
     """
     Starts a 'script' session and writes the PID to a file, but leaves control of the terminal to the user.
     """
     # Prepare the script command
-    script_command = ["script", "-f", SHELLAI_CAPTURED_FILE]
+    script_command = ["script", "-f", shellai_tmp_file]
 
     # Start the script session and leave control to the terminal
     os.system(' '.join(script_command))
 
-    # Remove the SHELLAI_CAPTURED_FILE after the script session ends
-    if os.path.exists(SHELLAI_CAPTURED_FILE):
-        logging.info(f"Removing {SHELLAI_CAPTURED_FILE}")
-        os.remove(SHELLAI_CAPTURED_FILE)
+    # Remove the captured output after the script session ends
+    if os.path.exists(shellai_tmp_file):
+        logging.info(f"Removing {shellai_tmp_file}")
+        os.remove(shellai_tmp_file)
 
 
-def handle_query(query: str) -> None:
+def handle_query(query: str, config: dict) -> None:
     logging.info("Waiting for response from AI...")
     payload = get_payload(query)
 
-    response = requests.post(
-        "http://0.0.0.0:8082/api/v1/query/", # TODO: move to config
-        headers = {"Content-Type": "application/json"},
-        data = json.dumps(payload),
-        timeout = 30 # waiting for more than 30 seconds does not make sense
-    )
+    backend_service = config.get('backend_service', {})
+    query_endpoint = backend_service.get('query_endpoint', 'http://0.0.0.0:8080/api/v1/query/')
+
+    try:
+        response = requests.post(
+            query_endpoint,
+            headers = {"Content-Type": "application/json"},
+            data = json.dumps(payload),
+            timeout = 30 # waiting for more than 30 seconds does not make sense
+        )
+    except requests.exceptions.RequestException as e:
+        logging.error(f"Failed to get response from AI: {e}")
+        exit(1)
 
     if response.status_code == 200:
         completion = response.json()
@@ -72,21 +98,29 @@ if __name__ == "__main__":
     args = sys.argv[1:]
     query = None
 
-    if input_data := sys.stdin.read():
-        logging.info("stdin detected")
+    if input_data := read_stdin():
+        logging.debug("stdin detected")
         query = input_data.strip()
 
     if not args and query is None:
         print(f"Usage: {sys.argv[0]} <'record'|query-like-string>", file=sys.stderr)
         exit(1)
 
-    if args and args[0] != 'record' and not os.path.exists(SHELLAI_CAPTURED_FILE):
-        # TODO config option, ignore script if specifically set to false
+    config_path = os.getenv('SHELLAI_CONFIG', 'config.yaml')
+    config = read_yaml_config(config_path)
+    if not config:
+        logging.warning("Config file not found. Script will continue with default values.")
+
+    output_capture_settings = config.get('output_capture_settings', {})
+    enforce_script_session = output_capture_settings.get('enforce_script_session', False)
+    captured_output_file = output_capture_settings.get('captured_output_file', '/tmp/minishellai_output.txt')
+
+    if enforce_script_session and args and args[0] != 'record' and not os.path.exists(captured_output_file):
         print(f"Please call `{sys.argv[0]} record` first to initialize script session.", file=sys.stderr)
         exit(1)
 
     if args and args[0] == 'record':
-        start_script_session()
+        start_script_session(captured_output_file)
     else:
         arg_query = ''.join(args)
         if arg_query:
@@ -94,9 +128,10 @@ if __name__ == "__main__":
                 query += '\n' + arg_query
             else:
                 query = arg_query
-        else:
+        elif query is None:
             print(f"Usage: {sys.argv[0]} <'record'|query-like-string>", file=sys.stderr)
+            exit(1)
 
         logging.info(f"Query: {query}")
-        handle_query(query)
+        handle_query(query, config)
 
