@@ -37,7 +37,7 @@ echo "How to uninstall RHEL?" | python3 minishellai.py
 echo "How to uninstall RHEL?" | python3 minishellai.py "Text that will be appended to the stdin"
 
 # Use caret '^' to use last command output as query context
-python3 miiishellai.py "How to uninstall RHEL? ^"
+python3 minishellai.py "How to uninstall RHEL? ^"
 # Tool then takes a look at config.yaml to see if output_file exists
 # The query then is in following format:
 # 2024-09-11 14:27:01,667 - INFO - Query:
