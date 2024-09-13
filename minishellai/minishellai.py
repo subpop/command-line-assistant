@@ -149,8 +149,10 @@ def handle_query(query: str, config: dict) -> None:
         response.raise_for_status()
         completion = response.json()
         response_data = completion.get("data", None)
+        references = completion.get("references", None)
+        references_str = '\n\nReferences:\n' +'\n'.join(references) if references else ""
         write_history(history_conf, payload.get('msg', []), response_data)
-        print(response_data)
+        print(response_data + references_str)
     except requests.exceptions.RequestException as e:
         logging.error(f"Failed to get response from AI: {e}")
         exit(1)
