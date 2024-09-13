@@ -33,22 +33,60 @@ def read_yaml_config(config_file: str) -> dict:
         logging.info(f"Reading config file {config_file}")
         return yaml.safe_load(f)
 
-def get_payload(query:str) -> dict:
+def read_history(config: dict) -> dict:
+    """
+    Reads the history from a file and returns it as a list of dictionaries.
+    """
+    if not config.get('enabled', False):
+        return []
+
+    filepath = config.get('filepath', '/tmp/minishellai_history.json')
+    if not filepath or not os.path.exists(filepath):
+        logging.warning(f"History file {filepath} does not exist.")
+        logging.warning("File will be created with first response.")
+        return []
+
+    max_size = config.get('max_size', 100)
+    history = []
+    try:
+        with open(filepath, 'r') as f:
+            history = json.load(f)
+    except json.JSONDecodeError as e:
+        logging.error(f"Failed to read history file {filepath}: {e}")
+        return []
+
+    logging.info(f"Taking last maximum of {max_size} entries from history.")
+    return history[:max_size]
+
+def write_history(config: dict, history: list, response: str) -> None:
+    """
+    Writes the history to a file.
+    """
+    if not config.get('enabled', False):
+        return
+    filepath = config.get('filepath', '/tmp/minishellai_history.json')
+    history.append({"role": "assistant", "content": response})
+    try:
+        with open(filepath, 'w') as f:
+            json.dump(history, f)
+    except json.JSONDecodeError as e:
+        logging.error(f"Failed to write history file {filepath}: {e}")
+
+def get_payload(query:str, history: list) -> dict:
      # Payload "msg" has to have the following structure. It is important that
     # roles of "user" and "assistant" are alternating. Role of "user" is always
     # first.
     # {"role": "user", "content": "tell me about selinux one sentence"},
     # {"role": "assistant", "content": "selinux is really cool."},
     # {"role": "user", "content": "how do I enable selinux?"},
-    # TODO: Implement history loading to payload
     payload = {
         "msg": [
+            *history,
             {"role": "user", "content": query},
         ],
         "metadata": {}
     }
     return payload
-
 
 def start_script_session(shellai_tmp_file) -> None:
     """
@@ -87,7 +125,6 @@ def handle_caret(query: str, config:dict) -> str:
     query = f"Context data: {output}\nQuestion: " + query
     return query
 
-
 def handle_query(query: str, config: dict) -> None:
     query = handle_caret(query, config)
     # NOTE: Add more query handling here
@@ -98,26 +135,24 @@ def handle_query(query: str, config: dict) -> None:
     query_endpoint = backend_service.get('query_endpoint', 'http://0.0.0.0:8080/api/v1/query/')
 
     try:
+        history_conf = config.get('history', {})
+        history = read_history(history_conf)
+        payload = get_payload(query, history)
+        logging.info("Waiting for response from AI...")
         response = requests.post(
             query_endpoint,
             headers = {"Content-Type": "application/json"},
-            data = json.dumps(get_payload(query)),
+            data = json.dumps(payload),
             timeout = 30 # waiting for more than 30 seconds does not make sense
         )
-        logging.info("Waiting for response from AI...")
+        response.raise_for_status()
+        completion = response.json()
+        response_data = completion.get("data", None)
+        write_history(history_conf, payload.get('msg', []), response_data)
+        print(response_data)
     except requests.exceptions.RequestException as e:
         logging.error(f"Failed to get response from AI: {e}")
         exit(1)
-
-    if response.status_code == 200:
-        completion = response.json()
-        data = completion.get("data", None)
-        answer = data
-    else:
-        print(f"Failed to get response from AI: {response.status_code}", file=sys.stderr)
-        exit(1)
-    print(answer)
-
 
 if __name__ == "__main__":
     args = sys.argv[1:]

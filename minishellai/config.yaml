@@ -5,3 +5,8 @@ output_capture: # if '^' is used, last command output will be used for query con
 backend_service:
   # proxy: http://todo:8080
   query_endpoint: http://0.0.0.0:8082/api/v1/query/
+history:
+  enabled: true
+  filepath: minishellai_history.json
+  max_size: 100  # max number of queries in history (including responses)
+
