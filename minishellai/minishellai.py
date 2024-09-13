@@ -1,3 +1,4 @@
+import argparse
 import json
 import logging
 import os
@@ -55,7 +56,7 @@ def read_history(config: dict) -> dict:
         logging.error(f"Failed to read history file {filepath}: {e}")
         return []
 
-    logging.info(f"Taking last maximum of {max_size} entries from history.")
+    logging.info(f"Taking maximum of {max_size} entries from history.")
     return history[:max_size]
 
 def write_history(config: dict, history: list, response: str) -> None:
@@ -154,43 +155,51 @@ def handle_query(query: str, config: dict) -> None:
         logging.error(f"Failed to get response from AI: {e}")
         exit(1)
 
-if __name__ == "__main__":
-    args = sys.argv[1:]
-    query = None
+def get_args():
+    parser = argparse.ArgumentParser(description="A script with multiple optional arguments and a required positional argument if no optional arguments are provided.")
 
-    if input_data := read_stdin():
+    parser.add_argument('--history-clear', action='store_true', help="Clear the history.")
+    parser.add_argument('--record', action='store_true', help="Initialize a script session (all other arguments will be ignored).")
+    parser.add_argument('--config', default=os.getenv('SHELLAI_CONFIG', 'config.yaml'), help="Path to the config file.")
+
+    # Positional argument, required only if no optional arguments are provided
+    parser.add_argument('query_string', nargs='?', help="Query string to be processed.")
+
+
+    args = parser.parse_args()
+    optional_args = [
+        args.history_clear,
+        args.record,
+    ]
+    if not args.query_string and (input_data := read_stdin()):
         logging.debug("stdin detected")
-        query = input_data.strip()
+        args.query_string = input_data.strip()
 
-    if not args and query is None:
-        print(f"Usage: {sys.argv[0]} <'record'|query-like-string>", file=sys.stderr)
-        exit(1)
+    if not any(optional_args) and not args.query_string:
+        parser.error("Query string is required if no optional arguments are provided.")
+    return parser, args
 
-    config_path = os.getenv('SHELLAI_CONFIG', 'config.yaml')
-    config = read_yaml_config(config_path)
+
+if __name__ == "__main__":
+    parser, args = get_args()
+
+    config = read_yaml_config(args.config)
     if not config:
         logging.warning("Config file not found. Script will continue with default values.")
 
-    output_capture_settings = config.get('output_capture_settings', {})
-    enforce_script_session = output_capture_settings.get('enforce_script_session', False)
-    captured_output_file = output_capture_settings.get('captured_output_file', '/tmp/minishellai_output.txt')
+    output_capture_conf = config.get('output_capture', {})
+    enforce_script_session = output_capture_conf.get('enforce_script', False)
+    output_file = output_capture_conf.get('output_file', '/tmp/minishellai_output.txt')
 
-    if enforce_script_session and args and args[0] != 'record' and not os.path.exists(captured_output_file):
-        print(f"Please call `{sys.argv[0]} record` first to initialize script session.", file=sys.stderr)
-        exit(1)
+    if enforce_script_session and (not args.record or not os.path.exists(output_file)):
+        parser.error(f"Please call `{sys.argv[0]} --record` first to initialize script session or create the output file.", file=sys.stderr)
 
-    if args and args[0] == 'record':
-        start_script_session(captured_output_file)
-    else:
-        arg_query = ''.join(args)
-        if arg_query:
-            if query is not None:
-                query += '\n' + arg_query
-            else:
-                query = arg_query
-        elif query is None:
-            print(f"Usage: {sys.argv[0]} <'record'|query-like-string>", file=sys.stderr)
-            exit(1)
-
-        handle_query(query, config)
-
+    # NOTE: This needs more refinement, script session can't be combined with other arguments
+    if args.record:
+        start_script_session(output_file)
+        exit(0)
+    if args.history_clear:
+        logging.info("Clearing history of conversation")
+        write_history(config.get('history', {}), [], "")
+    if args.query_string:
+        handle_query(args.query_string, config)
