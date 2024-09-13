@@ -21,6 +21,10 @@ output_capture: # if '^' is used, last command output will be used for query con
 backend_service:
   # proxy: http://todo:8080
   query_endpoint: http://0.0.0.0:8082/api/v1/query/
+history:
+  enabled: true
+  filepath: minishellai_history.json
+  max_size: 100  # max number of queries in history (including responses)
 ```
 
 ## Example queries
@@ -28,17 +32,20 @@ backend_service:
 Note that the core-backend service must be running to get answer from RAG
 
 ```sh
-python3 minishellai.py init
+python3 minishellai.py --record
 python3 minishellai.py "How to uninstall RHEL?"
+python3 minishellai.py --history-clear "How to uninstall RHEL?"
+python3 minishellai.py --config <custom config path> "How to uninstall RHEL?"
 
 # OR with stdin
 
 echo "How to uninstall RHEL?" | python3 minishellai.py
 echo "How to uninstall RHEL?" | python3 minishellai.py "Text that will be appended to the stdin"
 
-# Use caret '^' to use last command output as query context
+# Usage of caret '^'
+# Takes last command output as query context (must be available from output_file value in config)
 python3 minishellai.py "How to uninstall RHEL? ^"
-# Tool then takes a look at config.yaml to see if output_file exists
+#
 # The query then is in following format:
 # 2024-09-11 14:27:01,667 - INFO - Query:
 # Context data: context text from file specified in config
