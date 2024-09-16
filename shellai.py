@@ -41,7 +41,7 @@ def read_history(config: dict) -> dict:
     if not config.get('enabled', False):
         return []
 
-    filepath = config.get('filepath', '/tmp/minishellai_history.json')
+    filepath = config.get('filepath', '/tmp/shellai_history.json')
     if not filepath or not os.path.exists(filepath):
         logging.warning(f"History file {filepath} does not exist.")
         logging.warning("File will be created with first response.")
@@ -65,7 +65,7 @@ def write_history(config: dict, history: list, response: str) -> None:
     """
     if not config.get('enabled', False):
         return
-    filepath = config.get('filepath', '/tmp/minishellai_history.json')
+    filepath = config.get('filepath', '/tmp/shellai_history.json')
     if response:
         history.append({"role": "assistant", "content": response})
     try:
@@ -113,7 +113,7 @@ def handle_caret(query: str, config:dict) -> str:
         return query
 
     output_capture_settings = config.get('output_capture_settings', {})
-    captured_output_file = output_capture_settings.get('captured_output_file', '/tmp/minishellai_output.txt')
+    captured_output_file = output_capture_settings.get('captured_output_file', '/tmp/shellai_output.txt')
 
     if not os.path.exists(captured_output_file):
         logging.error(f"Output file {captured_output_file} does not exist, change location of file in config to use '^'.")
@@ -192,7 +192,7 @@ if __name__ == "__main__":
 
     output_capture_conf = config.get('output_capture', {})
     enforce_script_session = output_capture_conf.get('enforce_script', False)
-    output_file = output_capture_conf.get('output_file', '/tmp/minishellai_output.txt')
+    output_file = output_capture_conf.get('output_file', '/tmp/shellai_output.txt')
 
     if enforce_script_session and (not args.record or not os.path.exists(output_file)):
         parser.error(f"Please call `{sys.argv[0]} --record` first to initialize script session or create the output file.", file=sys.stderr)
