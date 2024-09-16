@@ -1,3 +1,4 @@
+import argparse
 import json
 import logging
 import os
@@ -33,22 +34,60 @@ def read_yaml_config(config_file: str) -> dict:
         logging.info(f"Reading config file {config_file}")
         return yaml.safe_load(f)
 
-def get_payload(query:str) -> dict:
+def read_history(config: dict) -> dict:
+    """
+    Reads the history from a file and returns it as a list of dictionaries.
+    """
+    if not config.get('enabled', False):
+        return []
+
+    filepath = config.get('filepath', '/tmp/minishellai_history.json')
+    if not filepath or not os.path.exists(filepath):
+        logging.warning(f"History file {filepath} does not exist.")
+        logging.warning("File will be created with first response.")
+        return []
+
+    max_size = config.get('max_size', 100)
+    history = []
+    try:
+        with open(filepath, 'r') as f:
+            history = json.load(f)
+    except json.JSONDecodeError as e:
+        logging.error(f"Failed to read history file {filepath}: {e}")
+        return []
+
+    logging.info(f"Taking maximum of {max_size} entries from history.")
+    return history[:max_size]
+
+def write_history(config: dict, history: list, response: str) -> None:
+    """
+    Writes the history to a file.
+    """
+    if not config.get('enabled', False):
+        return
+    filepath = config.get('filepath', '/tmp/minishellai_history.json')
+    history.append({"role": "assistant", "content": response})
+    try:
+        with open(filepath, 'w') as f:
+            json.dump(history, f)
+    except json.JSONDecodeError as e:
+        logging.error(f"Failed to write history file {filepath}: {e}")
+
+def get_payload(query:str, history: list) -> dict:
      # Payload "msg" has to have the following structure. It is important that
     # roles of "user" and "assistant" are alternating. Role of "user" is always
     # first.
     # {"role": "user", "content": "tell me about selinux one sentence"},
     # {"role": "assistant", "content": "selinux is really cool."},
     # {"role": "user", "content": "how do I enable selinux?"},
-    # TODO: Implement history loading to payload
     payload = {
         "msg": [
+            *history,
             {"role": "user", "content": query},
         ],
         "metadata": {}
     }
     return payload
-
 
 def start_script_session(shellai_tmp_file) -> None:
     """
@@ -87,7 +126,6 @@ def handle_caret(query: str, config:dict) -> str:
     query = f"Context data: {output}\nQuestion: " + query
     return query
 
-
 def handle_query(query: str, config: dict) -> None:
     query = handle_caret(query, config)
     # NOTE: Add more query handling here
@@ -98,64 +136,70 @@ def handle_query(query: str, config: dict) -> None:
     query_endpoint = backend_service.get('query_endpoint', 'http://0.0.0.0:8080/api/v1/query/')
 
     try:
+        history_conf = config.get('history', {})
+        history = read_history(history_conf)
+        payload = get_payload(query, history)
+        logging.info("Waiting for response from AI...")
         response = requests.post(
             query_endpoint,
             headers = {"Content-Type": "application/json"},
-            data = json.dumps(get_payload(query)),
+            data = json.dumps(payload),
             timeout = 30 # waiting for more than 30 seconds does not make sense
         )
-        logging.info("Waiting for response from AI...")
+        response.raise_for_status()
+        completion = response.json()
+        response_data = completion.get("data", None)
+        write_history(history_conf, payload.get('msg', []), response_data)
+        print(response_data)
     except requests.exceptions.RequestException as e:
         logging.error(f"Failed to get response from AI: {e}")
         exit(1)
 
-    if response.status_code == 200:
-        completion = response.json()
-        data = completion.get("data", None)
-        answer = data
-    else:
-        print(f"Failed to get response from AI: {response.status_code}", file=sys.stderr)
-        exit(1)
-    print(answer)
+def get_args():
+    parser = argparse.ArgumentParser(description="A script with multiple optional arguments and a required positional argument if no optional arguments are provided.")
+
+    parser.add_argument('--history-clear', action='store_true', help="Clear the history.")
+    parser.add_argument('--record', action='store_true', help="Initialize a script session (all other arguments will be ignored).")
+    parser.add_argument('--config', default=os.getenv('SHELLAI_CONFIG', 'config.yaml'), help="Path to the config file.")
+
+    # Positional argument, required only if no optional arguments are provided
+    parser.add_argument('query_string', nargs='?', help="Query string to be processed.")
+
+
+    args = parser.parse_args()
+    optional_args = [
+        args.history_clear,
+        args.record,
+    ]
+    if not args.query_string and (input_data := read_stdin()):
+        logging.debug("stdin detected")
+        args.query_string = input_data.strip()
+
+    if not any(optional_args) and not args.query_string:
+        parser.error("Query string is required if no optional arguments are provided.")
+    return parser, args
 
 
 if __name__ == "__main__":
-    args = sys.argv[1:]
-    query = None
+    parser, args = get_args()
 
-    if input_data := read_stdin():
-        logging.debug("stdin detected")
-        query = input_data.strip()
-
-    if not args and query is None:
-        print(f"Usage: {sys.argv[0]} <'record'|query-like-string>", file=sys.stderr)
-        exit(1)
-
-    config_path = os.getenv('SHELLAI_CONFIG', 'config.yaml')
-    config = read_yaml_config(config_path)
+    config = read_yaml_config(args.config)
     if not config:
         logging.warning("Config file not found. Script will continue with default values.")
 
-    output_capture_settings = config.get('output_capture_settings', {})
-    enforce_script_session = output_capture_settings.get('enforce_script_session', False)
-    captured_output_file = output_capture_settings.get('captured_output_file', '/tmp/minishellai_output.txt')
+    output_capture_conf = config.get('output_capture', {})
+    enforce_script_session = output_capture_conf.get('enforce_script', False)
+    output_file = output_capture_conf.get('output_file', '/tmp/minishellai_output.txt')
 
-    if enforce_script_session and args and args[0] != 'record' and not os.path.exists(captured_output_file):
-        print(f"Please call `{sys.argv[0]} record` first to initialize script session.", file=sys.stderr)
-        exit(1)
+    if enforce_script_session and (not args.record or not os.path.exists(output_file)):
+        parser.error(f"Please call `{sys.argv[0]} --record` first to initialize script session or create the output file.", file=sys.stderr)
 
-    if args and args[0] == 'record':
-        start_script_session(captured_output_file)
-    else:
-        arg_query = ''.join(args)
-        if arg_query:
-            if query is not None:
-                query += '\n' + arg_query
-            else:
-                query = arg_query
-        elif query is None:
-            print(f"Usage: {sys.argv[0]} <'record'|query-like-string>", file=sys.stderr)
-            exit(1)
-
-        handle_query(query, config)
-
+    # NOTE: This needs more refinement, script session can't be combined with other arguments
+    if args.record:
+        start_script_session(output_file)
+        exit(0)
+    if args.history_clear:
+        logging.info("Clearing history of conversation")
+        write_history(config.get('history', {}), [], "")
+    if args.query_string:
+        handle_query(args.query_string, config)
