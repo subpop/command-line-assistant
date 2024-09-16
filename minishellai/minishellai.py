@@ -66,7 +66,8 @@ def write_history(config: dict, history: list, response: str) -> None:
     if not config.get('enabled', False):
         return
     filepath = config.get('filepath', '/tmp/minishellai_history.json')
-    history.append({"role": "assistant", "content": response})
+    if response:
+        history.append({"role": "assistant", "content": response})
     try:
         with open(filepath, 'w') as f:
             json.dump(history, f)
