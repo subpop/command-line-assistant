@@ -3,7 +3,6 @@ import logging
 import os
 
 import requests
-
 from utils import get_payload
 
 

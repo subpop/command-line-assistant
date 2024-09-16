@@ -5,7 +5,15 @@ For now it is expected to work with:
 * [core-backend](https://gitlab.cee.redhat.com/rhel-lightspeed/enhanced-shell/core-backend)
   * Set up the core-backend [via local-dev-env](https://gitlab.cee.redhat.com/rhel-lightspeed/enhanced-shell/local-dev-env)
 
-## Create config
+## Install & Create config
+
+To install the package, run the following command:
+
+```sh
+pip3 install git+ssh://git@git@gitlab.cee.redhat.com:rhel-lightspeed/enhanced-shell/shellai.git
+
+# OR https instead of ssh
+```
 
 Save config to your desired path and then set environment variable for shellai to find the config.
 

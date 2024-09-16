@@ -39,8 +39,7 @@ def get_args():
         parser.error("Query string is required if no optional arguments are provided.")
     return parser, args
 
-
-if __name__ == "__main__":
+def main():
     parser, args = get_args()
 
     config = read_yaml_config(args.config)
@@ -63,3 +62,6 @@ if __name__ == "__main__":
         handle_history_write(config.get('history', {}), [], "")
     if args.query_string:
         handle_query(args.query_string, config)
+
+if __name__ == "__main__":
+    main()
