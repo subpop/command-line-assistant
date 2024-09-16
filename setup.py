@@ -15,7 +15,7 @@ setup(
     long_description_content_type="text/markdown",
     url="https://gitlab.cee.redhat.com/rhel-lightspeed/enhanced-shell/shellai",
     packages=find_packages(),
-    install_requires=parse_requirements("shellai/requirements.txt"),
+    install_requires=parse_requirements("requirements.txt"),
     entry_points={
         'console_scripts': [
             'shellai = shellai.main:main',

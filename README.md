@@ -10,7 +10,7 @@ For now it is expected to work with:
 To install the package, run the following command:
 
 ```sh
-pip3 install git+ssh://git@git@gitlab.cee.redhat.com:rhel-lightspeed/enhanced-shell/shellai.git
+pip3 install git+ssh://git@gitlab.cee.redhat.com/rhel-lightspeed/enhanced-shell/shellai.git
 
 # OR https instead of ssh
 ```
