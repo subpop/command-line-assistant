@@ -3,7 +3,7 @@ import logging
 import os
 
 import requests
-from utils import get_payload
+from shellai.utils import get_payload
 
 
 def _handle_history_read(config: dict) -> dict:

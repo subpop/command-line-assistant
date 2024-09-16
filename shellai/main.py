@@ -3,8 +3,8 @@ import logging
 import os
 import sys
 
-from handlers import handle_history_write, handle_query, handle_script_session
-from utils import read_stdin, read_yaml_config
+from shellai.handlers import handle_history_write, handle_query, handle_script_session
+from shellai.utils import read_stdin, read_yaml_config
 
 logging.basicConfig(
     level=logging.INFO,
