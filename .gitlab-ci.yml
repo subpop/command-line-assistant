@@ -8,3 +8,12 @@ lint:
     - source venv/bin/activate
     - make install
     - make lint
+
+test:
+  tags:
+    - shared
+  script:
+    - python -m venv venv
+    - source venv/bin/activate
+    - make install
+    - make test
