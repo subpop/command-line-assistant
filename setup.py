@@ -5,6 +5,7 @@ def parse_requirements(filename):
     with open(filename, "r") as file:
         return file.read().splitlines()
 
+
 setup(
     name="shellai",
     version="0.0.1",
@@ -17,12 +18,12 @@ setup(
     packages=find_packages(),
     install_requires=parse_requirements("requirements.txt"),
     entry_points={
-        'console_scripts': [
-            'shellai = shellai.main:main',
+        "console_scripts": [
+            "shellai = shellai.__main__:main",
         ],
     },
     classifiers=[
         "Programming Language :: Python :: 3",
     ],
-    python_requires='>=3.12',
+    python_requires=">=3.12",
 )

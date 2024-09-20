@@ -13,6 +13,7 @@ To install the package, run the following command:
 pip3 install git+ssh://git@gitlab.cee.redhat.com/rhel-lightspeed/enhanced-shell/shellai.git
 
 # OR https instead of ssh
+pip3 install git+https://gitlab.cee.redhat.com/rhel-lightspeed/enhanced-shell/shellai.git
 ```
 
 Save config to your desired path and then set environment variable for shellai to find the config.
@@ -36,24 +37,34 @@ history:
   max_size: 100  # max number of queries in history (including responses)
 ```
 
+## Development setup
+
+```sh
+python -m venv venv
+pip install -e .
+
+# Use the default config.yaml file in the project
+export SHELLAI_CONFIG_PATH=$(pwd)/config.yaml
+```
+
 ## Example queries
 
 Note that the core-backend service must be running to get answer from RAG
 
 ```sh
-python3 shellai.py --record
-python3 shellai.py "How to uninstall RHEL?"
-python3 shellai.py --history-clear "How to uninstall RHEL?"
-python3 shellai.py --config <custom config path> "How to uninstall RHEL?"
+shellai --record
+shellai "How to uninstall RHEL?"
+shellai --history-clear "How to uninstall RHEL?"
+shellai --config <custom config path> "How to uninstall RHEL?"
 
-# OR with stdin
+# OR with stdin     
 
-echo "How to uninstall RHEL?" | python3 shellai.py
-echo "How to uninstall RHEL?" | python3 shellai.py "Text that will be appended to the stdin"
+echo "How to uninstall RHEL?" | shellai
+echo "How to uninstall RHEL?" | shellai "Text that will be appended to the stdin"
 
 # Usage of caret '^'
 # Takes last command output as query context (must be available from output_file value in config)
-python3 shellai.py "How to uninstall RHEL? ^"
+shellai "How to uninstall RHEL? ^"
 #
 # The query then is in following format:
 # 2024-09-11 14:27:01,667 - INFO - Query:
