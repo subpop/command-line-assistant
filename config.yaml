@@ -3,8 +3,7 @@ output_capture: # if '^' is used, last command output will be used for query con
   output_file: /tmp/shellai_output.txt  # file with output(s) of regular commands (e.g. ls, echo, etc.)
   prompt_separator: '$'  # Keep non-empty if your file contains only output of commands (not prompt itself)
 backend_service:
-  # proxy: http://todo:8080
-  query_endpoint: http://0.0.0.0:8082/api/v1/query/
+  query_endpoint: http://0.0.0.0:8080/v1/query/
 history:
   enabled: true
   filepath: shellai_history.json

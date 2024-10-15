@@ -24,7 +24,7 @@ def read_stdin():
     # If no input, return None or handle as you prefer
     return None
 
-def get_payload(query:str, history: list) -> dict:
+def get_payload(query:str) -> dict:
      # Payload "msg" has to have the following structure. It is important that
     # roles of "user" and "assistant" are alternating. Role of "user" is always
     # first.
@@ -32,10 +32,6 @@ def get_payload(query:str, history: list) -> dict:
     # {"role": "assistant", "content": "selinux is really cool."},
     # {"role": "user", "content": "how do I enable selinux?"},
     payload = {
-        "msg": [
-            *history,
-            {"role": "user", "content": query},
-        ],
-        "metadata": {}
+        "query": query
     }
     return payload
