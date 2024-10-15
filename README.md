@@ -2,8 +2,7 @@
 
 For now it is expected to work with:
 
-* [core-backend](https://gitlab.cee.redhat.com/rhel-lightspeed/enhanced-shell/core-backend)
-  * Set up the core-backend [via local-dev-env](https://gitlab.cee.redhat.com/rhel-lightspeed/enhanced-shell/local-dev-env)
+* [OpenShift Lightspeed Service](https://github.com/openshift/lightspeed-service)
 
 ## Install & Create config
 
@@ -30,7 +29,7 @@ output_capture: # if '^' is used, last command output will be used for query con
   prompt_separator: '$'  # Keep non-empty if your file contains only output of commands (not prompt itself)
 backend_service:
   # proxy: http://todo:8080
-  query_endpoint: http://0.0.0.0:8082/api/v1/query/
+  query_endpoint: http://0.0.0.0:8080/v1/query/
 history:
   enabled: true
   filepath: shellai_history.json
@@ -42,9 +41,6 @@ history:
 ```sh
 python -m venv venv
 pip install -e .
-
-# Use the default config.yaml file in the project
-export SHELLAI_CONFIG_PATH=$(pwd)/config.yaml
 ```
 
 ## Example queries

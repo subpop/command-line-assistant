@@ -3,6 +3,7 @@ import logging
 import os
 
 import requests
+
 from shellai.utils import get_payload
 
 
@@ -87,15 +88,15 @@ def handle_query(query: str, config: dict) -> None:
     query = _handle_caret(query, config)
     # NOTE: Add more query handling here
 
-    logging.info(f"Query:\n{query}")
+    logging.info(f"Query: {query}")
 
     backend_service = config.get('backend_service', {})
-    query_endpoint = backend_service.get('query_endpoint', 'http://0.0.0.0:8080/api/v1/query/')
+    query_endpoint = backend_service.get('query_endpoint', 'http://0.0.0.0:8080/v1/query/')
 
     try:
         history_conf = config.get('history', {})
         history = _handle_history_read(history_conf)
-        payload = get_payload(query, history)
+        payload = get_payload(query)
         logging.info("Waiting for response from AI...")
         response = requests.post(
             query_endpoint,
@@ -105,10 +106,14 @@ def handle_query(query: str, config: dict) -> None:
         )
         response.raise_for_status()
         completion = response.json()
-        response_data = completion.get("data", None)
-        references = completion.get("references", None)
+        response_data = completion.get("response", {})
+        references = completion.get("referenced_documents", {})
+        references = [f'{reference['title']}: {reference['docs_url']}' for reference in references]
         references_str = '\n\nReferences:\n' +'\n'.join(references) if references else ""
-        handle_history_write(history_conf, payload.get('msg', []), response_data)
+        handle_history_write(history_conf, [
+            *history,
+            {"role": "user", "content": query},
+        ], response_data)
         print(response_data + references_str)
     except requests.exceptions.RequestException as e:
         logging.error(f"Failed to get response from AI: {e}")
