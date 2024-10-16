@@ -1,7 +1,23 @@
-.ruff_cache
-shellai_*
-venv/
+# ignore python and editors cache
 __pycache__/
 .pytest_cache/
 *.egg-info
+.vscode/
+.idea
+
+# ignore thirdy-party tool caches
+.ruff_cache
+
+# ignore shellai_history
+shellai_history.json
+
+# ignore venv
+[.]venv/
+.pdm-python
+
+# ignore test results
 .coverage
+htmlcov/
+
+# ignore builds
+.pdm-build
