@@ -8,4 +8,3 @@ history:
   enabled: true
   filepath: shellai_history.json
   max_size: 100  # max number of queries in history (including responses)
-
