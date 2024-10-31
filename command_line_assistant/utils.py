@@ -1,6 +1,5 @@
 import select
 import sys
-from pathlib import Path
 
 
 def read_stdin():
@@ -22,12 +21,3 @@ def get_payload(query: str) -> dict:
     # {"role": "user", "content": "how do I enable selinux?"},
     payload = {"query": query}
     return payload
-
-
-def expand_user_path(file_path: str) -> Path:
-    """Helper method to expand user provided path."""
-    path = Path(file_path)
-    if not path.exists():
-        raise FileNotFoundError(f"Current file does not exist or was not found: {path}")
-
-    return Path(path).expanduser()
