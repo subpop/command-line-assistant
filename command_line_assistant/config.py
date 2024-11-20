@@ -9,9 +9,9 @@ from typing import ClassVar
 # tomllib is available in the stdlib after Python3.11. Before that, we import
 # from tomli.
 try:
-    import tomllib
+    import tomllib  # pyright: ignore[reportMissingImports]
 except ImportError:
-    import tomli as tomllib
+    import tomli as tomllib  # pyright: ignore[reportMissingImports]
 
 
 CONFIG_DEFAULT_PATH: Path = Path("~/.config/command-line-assistant/config.toml")
@@ -50,7 +50,9 @@ class LoggingSchema:
         "minimal",
     )
     type: str = "minimal"
-    file: str | Path = "~/.cache/command-line-assistant/command-line-assistant.log"
+    file: str | Path = Path(  # type: ignore
+        "~/.cache/command-line-assistant/command-line-assistant.log"
+    )
 
     def _validate_logging_type(self, type: str):
         if type not in self._logging_types:
@@ -59,7 +61,7 @@ class LoggingSchema:
             )
 
     def __post_init__(self):
-        self.file = Path(self.file).expanduser()
+        self.file: Path = Path(self.file).expanduser()
 
 
 @dataclasses.dataclass
@@ -67,11 +69,11 @@ class OutputSchema:
     """This class represents the [output] section of our config.toml file."""
 
     enforce_script: bool = False
-    file: str | Path = "/tmp/command-line-assistant_output.txt"
+    file: str | Path = Path("/tmp/command-line-assistant_output.txt")  # type: ignore
     prompt_separator: str = "$"
 
     def __post_init__(self):
-        self.file = Path(self.file).expanduser()
+        self.file: Path = Path(self.file).expanduser()
 
 
 @dataclasses.dataclass
@@ -79,13 +81,13 @@ class HistorySchema:
     """This class represents the [history] section of our config.toml file."""
 
     enabled: bool = True
-    file: str | Path = (
+    file: str | Path = Path(  # type: ignore
         "~/.local/share/command-line-assistant/command-line-assistant_history.json"
     )
     max_size: int = 100
 
     def __post_init__(self):
-        self.file = Path(self.file).expanduser()
+        self.file: Path = Path(self.file).expanduser()
 
 
 @dataclasses.dataclass
