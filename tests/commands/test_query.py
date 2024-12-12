@@ -1,97 +1,159 @@
-from unittest.mock import Mock, patch
+from argparse import ArgumentParser, Namespace
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from command_line_assistant.commands.query import QueryCommand, register_subcommand
-from command_line_assistant.config import (
-    Config,
-)
+from command_line_assistant.dbus.definitions import MessageInput, MessageOutput
 
 
-@pytest.fixture
-def query_command(mock_config):
-    """Fixture to create a QueryCommand instance"""
-    return QueryCommand("test query", mock_config)
+# Mock the entire DBus service/constants module
+@pytest.fixture(autouse=True)
+def mock_dbus_service():
+    """Fixture to mock DBus service and automatically use it for all tests"""
+    with patch(
+        "command_line_assistant.commands.query.SERVICE_IDENTIFIER"
+    ) as mock_service:
+        # Create a mock proxy that will be returned by get_proxy()
+        mock_proxy = MagicMock()
+        mock_service.get_proxy.return_value = mock_proxy
+
+        # Setup default mock response
+        mock_output = MessageOutput()
+        mock_output.message = "default mock response"
+        mock_proxy.RetrieveAnswer = MessageOutput.to_structure(mock_output)
+
+        yield mock_proxy
 
 
-def test_query_command_initialization(query_command):
+def test_query_command_initialization():
     """Test QueryCommand initialization"""
-    assert query_command._query == "test query"
-    assert isinstance(query_command._config, Config)
-
-
-@patch("command_line_assistant.commands.query.handle_query")
-def test_query_command_run(mock_handle_query, query_command):
-    """Test QueryCommand run method"""
-    query_command.run()
-    mock_handle_query.assert_called_once_with("test query", query_command._config)
-
-
-@patch("command_line_assistant.commands.query.handle_query")
-def test_query_command_with_empty_query(mock_handle_query, mock_config):
-    """Test QueryCommand with empty query"""
-    command = QueryCommand("", mock_config)
-    command.run()
-    mock_handle_query.assert_called_once_with("", mock_config)
-
-
-def test_register_subcommand():
-    """Test subcommand registration"""
-    mock_parser = Mock()
-    mock_subparser = Mock()
-    mock_parser.add_parser.return_value = mock_subparser
-    mock_config = Mock()
-
-    register_subcommand(mock_parser, mock_config)
-
-    # Verify parser configuration
-    mock_parser.add_parser.assert_called_once_with("query", help="")
-    mock_subparser.add_argument.assert_called_once_with(
-        "query_string", nargs="?", help="Query string to be processed."
-    )
-    assert mock_subparser.set_defaults.called
+    query = "test query"
+    command = QueryCommand(query)
+    assert command._query == query
 
 
 @pytest.mark.parametrize(
-    "query_string,expected",
+    (
+        "test_input",
+        "expected_output",
+    ),
     [
-        ("normal query", "normal query"),
-        ("", ""),
-        ("complex query with spaces", "complex query with spaces"),
-        ("query?with!special@chars", "query?with!special@chars"),
+        ("how to list files?", "Use the ls command"),
+        ("what is linux?", "Linux is an operating system"),
     ],
 )
-def test_query_command_different_inputs(mock_config, query_string, expected):
-    """Test QueryCommand with different input strings"""
-    command = QueryCommand(query_string, mock_config)
-    assert command._query == expected
+def test_query_command_run(mock_dbus_service, test_input, expected_output, capsys):
+    """Test QueryCommand run method with different inputs"""
+    # Setup mock response for this specific test
+    mock_output = MessageOutput()
+    mock_output.message = expected_output
+    mock_dbus_service.RetrieveAnswer = MessageOutput.to_structure(mock_output)
 
-
-@patch("command_line_assistant.commands.query.handle_query")
-def test_query_command_error_handling(mock_handle_query, query_command):
-    """Test QueryCommand error handling"""
-    mock_handle_query.side_effect = Exception("Test error")
-
-    with pytest.raises(Exception) as exc_info:
-        query_command.run()
-
-    assert str(exc_info.value) == "Test error"
-    mock_handle_query.assert_called_once()
-
-
-def test_query_command_config_validation(mock_config):
-    """Test QueryCommand with invalid config"""
-    # Modify config to be invalid
-    mock_config.backend.endpoint = ""
-
-    command = QueryCommand("test query", mock_config)
-    assert command._config.backend.endpoint == ""
-
-
-@patch("command_line_assistant.commands.query.handle_query")
-def test_query_command_with_special_characters(mock_handle_query, mock_config):
-    """Test QueryCommand with special characters in query"""
-    special_query = r"test\nquery\twith\rspecial\characters"
-    command = QueryCommand(special_query, mock_config)
+    # Create and run command
+    command = QueryCommand(test_input)
     command.run()
-    mock_handle_query.assert_called_once_with(special_query, mock_config)
+
+    # Verify ProcessQuery was called with correct input
+    expected_input = MessageInput()
+    expected_input.message = test_input
+    mock_dbus_service.ProcessQuery.assert_called_once_with(
+        MessageInput.to_structure(expected_input)
+    )
+
+    # Verify output was printed
+    captured = capsys.readouterr()
+    assert expected_output in captured.out.strip()
+
+
+def test_query_command_empty_response(mock_dbus_service, capsys):
+    """Test QueryCommand handling empty response"""
+    # Setup empty response
+    mock_output = MessageOutput()
+    mock_output.message = ""
+    mock_dbus_service.RetrieveAnswer = MessageOutput.to_structure(mock_output)
+
+    command = QueryCommand("test query")
+    command.run()
+
+    captured = capsys.readouterr()
+    assert "Requesting knowledge from AI" in captured.out.strip()
+
+
+@pytest.mark.parametrize(
+    ("test_args",),
+    [
+        ("",),
+        ("   ",),
+    ],
+)
+def test_query_command_invalid_inputs(mock_dbus_service, test_args):
+    """Test QueryCommand with invalid inputs"""
+    command = QueryCommand(test_args)
+    command.run()
+    # Verify DBus calls still happen even with invalid input
+    mock_dbus_service.ProcessQuery.assert_called_once()
+
+
+def test_register_subcommand():
+    """Test register_subcommand function"""
+    parser = ArgumentParser()
+    subparsers = parser.add_subparsers()
+
+    # Register the subcommand
+    register_subcommand(subparsers)
+
+    # Parse a test command
+    args = parser.parse_args(["query", "test query"])
+
+    assert args.query_string == "test query"
+    assert hasattr(args, "func")
+
+
+def test_command_factory():
+    """Test _command_factory function"""
+
+    from command_line_assistant.commands.query import _command_factory
+
+    args = Namespace(query_string="test query")
+    command = _command_factory(args)
+
+    assert isinstance(command, QueryCommand)
+    assert command._query == "test query"
+
+
+def test_dbus_error_handling(mock_dbus_service, capsys):
+    """Test handling of DBus errors"""
+    from dasbus.error import DBusError
+
+    # Make ProcessQuery raise a DBus error
+    mock_dbus_service.ProcessQuery.side_effect = DBusError("Test DBus Error")
+
+    command = QueryCommand("test query")
+    command.run()
+
+    # Verify error message in stdout
+    captured = capsys.readouterr()
+    assert "Uh oh... Something went wrong. Try again later." in captured.out.strip()
+
+
+def test_query_with_special_characters(mock_dbus_service, capsys):
+    """Test query containing special characters"""
+    special_query = "test!@#$%^&*()_+ query"
+    expected_response = "response with special chars !@#$"
+
+    mock_output = MessageOutput()
+    mock_output.message = expected_response
+    mock_dbus_service.RetrieveAnswer = MessageOutput.to_structure(mock_output)
+
+    command = QueryCommand(special_query)
+    command.run()
+
+    expected_input = MessageInput()
+    expected_input.message = special_query
+    mock_dbus_service.ProcessQuery.assert_called_once_with(
+        MessageInput.to_structure(expected_input)
+    )
+
+    captured = capsys.readouterr()
+    assert expected_response in captured.out.strip()
