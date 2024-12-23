@@ -19,8 +19,8 @@ def submit(query: str, config: Config) -> str:
     query = handle_caret(query, config)
     # NOTE: Add more query handling here
 
-    query_endpoint = f"{config.backend.endpoint}/v1/query"
-    payload = {"query": query}
+    query_endpoint = f"{config.backend.endpoint}/infer"
+    payload = {"question": query}
 
     try:
         logger.info("Waiting for response from AI...")
@@ -33,7 +33,8 @@ def submit(query: str, config: Config) -> str:
 
         response.raise_for_status()
         data = response.json()
-        return data.get("response", "")
+        data = data.get("data", {})
+        return data.get("text", "")
     except RequestException as e:
         logger.error("Failed to get response from AI: %s", e)
         raise
