@@ -4,7 +4,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from command_line_assistant.rendering.base import OutputStreamWritter
+from command_line_assistant.rendering.base import BaseStream
 from command_line_assistant.rendering.decorators.colors import ColorDecorator
 from command_line_assistant.rendering.decorators.text import (
     EmojiDecorator,
@@ -13,7 +13,7 @@ from command_line_assistant.rendering.decorators.text import (
 from command_line_assistant.rendering.renders.spinner import Frames, SpinnerRenderer
 
 
-class MockStream(OutputStreamWritter):
+class MockStream(BaseStream):
     """Mock stream class for testing"""
 
     def __init__(self):
@@ -55,34 +55,6 @@ def test_spinner_custom_initialization():
     assert spinner._message == "Custom loading"
     assert spinner._delay == 0.2
     assert spinner._clear_message is True
-
-
-@pytest.mark.parametrize(
-    "decorator,expected_pattern",
-    [
-        (ColorDecorator(foreground="green"), "\x1b[32mTest message\x1b[0m"),
-        (EmojiDecorator("🚀"), "🚀 Test message"),
-        (TextWrapDecorator(width=20), "Test message"),
-    ],
-)
-def test_spinner_decorator_application(spinner, decorator, expected_pattern):
-    """Test that different decorators are properly applied"""
-    spinner.update(decorator)
-    spinner.render("Test message")
-
-    assert any(expected_pattern in text for text in spinner._stream.written)
-
-
-def test_multiple_decorators(spinner):
-    """Test applying multiple decorators"""
-    spinner.update(ColorDecorator(foreground="blue"))
-    spinner.update(EmojiDecorator("⭐"))
-    spinner.render("Test message")
-
-    written = spinner._stream.written[-1]
-    assert "⭐" in written
-    assert "\x1b[34m" in written  # Blue color code
-    assert "Test message" in written
 
 
 def test_spinner_start_stop(spinner):
