@@ -41,9 +41,12 @@ A simple wrapper to interact with RAG
 %install
 %py3_install_wheel %{python_package_src}-%{version}-py3-none-any.whl
 
-# Create sbin directory in buildroot
+# Create needed directories in buildroot
 %{__install} -d %{buildroot}/%{_sbindir}
 %{__install} -d %{buildroot}/%{_sysconfdir}/xdg/%{python_package_src}
+%{__install} -d %{buildroot}/%{_sharedstatedir}/%{name}
+%{__install} -d %{buildroot}/%{_mandir}/man1
+%{__install} -d %{buildroot}/%{_mandir}/man8
 
 # Move the daemon to /usr/sbin instead of /usr/bin
 %{__install} -m 0755 %{buildroot}/%{_bindir}/%{daemon_binary_name} %{buildroot}/%{_sbindir}/%{daemon_binary_name}
@@ -61,10 +64,11 @@ A simple wrapper to interact with RAG
 %{__install} -D -m 0644 data/release/xdg/config.toml %{buildroot}/%{_sysconfdir}/xdg/%{python_package_src}/config.toml
 
 # History file
-## Create the folder under /var/lib/command-line-assistatnt
-%{__install} -d %{buildroot}/%{_sharedstatedir}/%{name}
-## Place the history file there
 %{__install} -D -m 0644 data/release/xdg/history.json %{buildroot}/%{_sharedstatedir}/%{name}/history.json
+
+# Manpages
+%{__install} -D -m 0644 data/release/man/%{binary_name}.1 %{buildroot}/%{_mandir}/man1/%{binary_name}.1
+%{__install} -D -m 0644 data/release/man/%{daemon_binary_name}.8 %{buildroot}/%{_mandir}/man8/%{daemon_binary_name}.8
 
 %post
 %systemd_post %{daemon_binary_name}.service
@@ -75,9 +79,13 @@ A simple wrapper to interact with RAG
 %postun
 %systemd_postun_with_restart %{daemon_binary_name}.service
 
+%doc
+README.md
+
+%license
+LICENSE
+
 %files
-%doc README.md
-%license LICENSE
 %{python3_sitelib}/%{python_package_src}/
 %{python3_sitelib}/%{python_package_src}-%{version}.dist-info/
 
@@ -98,5 +106,9 @@ A simple wrapper to interact with RAG
 
 # History file
 %{_sharedstatedir}/%{name}/history.json
+
+# Manpages
+%{_mandir}/man1/%{binary_name}.1.gz
+%{_mandir}/man8/%{daemon_binary_name}.8.gz
 
 %changelog
