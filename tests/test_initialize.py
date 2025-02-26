@@ -1,9 +1,12 @@
+from argparse import Namespace
 from unittest.mock import Mock, patch
 
 import pytest
+from dasbus.error import DBusError
 
+from command_line_assistant.commands.base import BaseCLICommand
+from command_line_assistant.constants import VERSION
 from command_line_assistant.initialize import initialize
-from command_line_assistant.utils.cli import BaseCLICommand
 
 
 class MockCommand(BaseCLICommand):
@@ -28,7 +31,7 @@ def test_initialize_with_no_args(capsys):
     ("argv", "stdin"),
     (
         (
-            ["c", "query", "test", "query"],
+            ["c", "chat", "test", "query"],
             None,
         ),
         (["c"], "test from stdin"),
@@ -37,11 +40,11 @@ def test_initialize_with_no_args(capsys):
 )
 def test_initialize_with_query_command(argv, stdin):
     """Test initialize with query command"""
-    mock_command = Mock(return_value=MockCommand())
+    mock_command = Mock(return_value=MockCommand(Namespace()))
 
     with (
         patch("sys.argv", argv),
-        patch("command_line_assistant.commands.query.register_subcommand"),
+        patch("command_line_assistant.commands.chat.register_subcommand"),
         patch("command_line_assistant.commands.history.register_subcommand"),
         patch("command_line_assistant.initialize.read_stdin", lambda: stdin),
         patch("argparse.ArgumentParser.parse_args") as mock_parse,
@@ -55,11 +58,11 @@ def test_initialize_with_query_command(argv, stdin):
 
 def test_initialize_with_history_command():
     """Test initialize with history command"""
-    mock_command = Mock(return_value=MockCommand())
+    mock_command = Mock(return_value=MockCommand(Namespace()))
 
     with (
         patch("sys.argv", ["c", "history", "--clear"]),
-        patch("command_line_assistant.commands.query.register_subcommand"),
+        patch("command_line_assistant.commands.chat.register_subcommand"),
         patch("command_line_assistant.commands.history.register_subcommand"),
         patch("command_line_assistant.initialize.read_stdin", lambda: None),
         patch("argparse.ArgumentParser.parse_args") as mock_parse,
@@ -71,15 +74,36 @@ def test_initialize_with_history_command():
         mock_command.assert_called_once()
 
 
-def test_initialize_with_version():
+def test_initialize_with_shell_command():
+    """Test initialize with shell command"""
+    mock_command = Mock(return_value=MockCommand(Namespace()))
+
+    with (
+        patch("sys.argv", ["c", "shell", "--enable-integration"]),
+        patch("command_line_assistant.commands.chat.register_subcommand"),
+        patch("command_line_assistant.commands.history.register_subcommand"),
+        patch("command_line_assistant.commands.shell.register_subcommand"),
+        patch("command_line_assistant.initialize.read_stdin", lambda: None),
+        patch("argparse.ArgumentParser.parse_args") as mock_parse,
+    ):
+        mock_parse.return_value.func = mock_command
+        result = initialize()
+
+        assert result == 1
+        mock_command.assert_called_once()
+
+
+def test_initialize_with_version(capsys):
     """Test initialize with --version flag"""
     with (
         patch("sys.argv", ["c", "--version"]),
         patch("command_line_assistant.initialize.read_stdin", lambda: None),
-        patch("argparse.ArgumentParser.exit") as mock_exit,
     ):
-        initialize()
-        mock_exit.assert_called_once()
+        with pytest.raises(SystemExit):
+            initialize()
+
+        captured = capsys.readouterr()
+        assert VERSION in captured.out
 
 
 def test_initialize_with_help(capsys):
@@ -97,16 +121,20 @@ def test_initialize_with_help(capsys):
 
 def test_initialize_bad_stdin(capsys):
     with patch("command_line_assistant.initialize.read_stdin") as mock_stdin:
-        mock_stdin.side_effect = UnicodeDecodeError(
-            "utf-8", b"", 0, 1, "invalid start byte"
-        )
+        mock_stdin.side_effect = ValueError("Binary input are not supported.")
         initialize()
 
     captured = capsys.readouterr()
-    assert (
-        "The stdin provided could not be decoded. Please, make sure it is in\ntextual format."
-        in captured.err
-    )
+    assert "\x1b[31m🙁 Binary input are not supported.\x1b[0m\n" in captured.err
+
+
+def test_initialize_keyboard_interrupt(capsys):
+    with patch("command_line_assistant.initialize.read_stdin") as mock_stdin:
+        mock_stdin.side_effect = KeyboardInterrupt("Interrupted")
+        initialize()
+
+    captured = capsys.readouterr()
+    assert "\x1b[31m🙁 Uh, oh! Keyboard interrupt detected.\x1b[0m\n" in captured.err
 
 
 @pytest.mark.parametrize(
@@ -115,20 +143,22 @@ def test_initialize_bad_stdin(capsys):
         "expected_command",
     ),
     [
-        (["c"], "query"),  # Default to query
-        (["c", "query"], "query"),
+        (["c"], "chat"),  # Default to chat
+        (["c", "chat"], "chat"),
         (["c", "history"], "history"),
+        (["c", "shell"], "shell"),
     ],
 )
 def test_initialize_command_selection(argv, expected_command):
     """Test command selection logic"""
-    mock_command = Mock(return_value=MockCommand())
+    mock_command = Mock(return_value=MockCommand(Namespace()))
 
     with (
         patch("sys.argv", argv),
         patch("command_line_assistant.initialize.read_stdin", lambda: None),
-        patch("command_line_assistant.commands.query.register_subcommand"),
+        patch("command_line_assistant.commands.chat.register_subcommand"),
         patch("command_line_assistant.commands.history.register_subcommand"),
+        patch("command_line_assistant.commands.shell.register_subcommand"),
         patch("argparse.ArgumentParser.parse_args") as mock_parse,
     ):
         mock_parse.return_value.func = mock_command
@@ -138,3 +168,12 @@ def test_initialize_command_selection(argv, expected_command):
 
         assert result == 1
         mock_command.assert_called_once()
+
+
+def test_dbus_initialization_error(capsys):
+    with patch("command_line_assistant.initialize.read_stdin") as mock_stdin:
+        mock_stdin.side_effect = DBusError("Name is not active")
+        initialize()
+
+    captured = capsys.readouterr()
+    assert "Failed to communicate with CLAD through dbus." in captured.err

@@ -9,25 +9,26 @@ from command_line_assistant.rendering.stream import StdoutStream
 
 
 class TextRenderer(BaseRenderer):
-    """This is a specialized class to render output based on the `stream` parameter to the terminal."""
+    """Specialized class to render textual output"""
 
     def __init__(self, stream: Optional[BaseStream] = None) -> None:
         """Constructor of the class
 
         Example:
             This class can be used as this:
+
                 >>> text_renderer = TextRenderer()
                 >>> text_renderer.render("Hello, world!")
 
-        Args:
-            stream (Optional[OutputStreamWritter], optional): The stream to where the output will be. Can be either `py:StdoutStream` or `py:StderrStream`. Defaults to StdoutStream().
+        Arguments:
+            stream (Optional[BaseStream], optional): The stream to where the output will be. Can be either `py:StdoutStream` or `py:StderrStream`.
         """
         super().__init__(stream or StdoutStream())
 
     def render(self, text: str) -> None:
         """The main function to render thext.
 
-        Args:
+        Arguments:
             text (str): The textual value that will be represented in the terminal.
         """
         lines = text.splitlines()

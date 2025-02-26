@@ -1,44 +1,59 @@
 """Module to control the history plugins and provide an abstract interface to execute them."""
 
+import logging
 from typing import Optional, Type
 
 from command_line_assistant.config import Config
-from command_line_assistant.daemon.session import UserSessionManager
+from command_line_assistant.daemon.database.models.history import HistoryModel
+from command_line_assistant.dbus.exceptions import HistoryNotEnabledError
 from command_line_assistant.history.base import BaseHistoryPlugin
+
+#: Default history plugin error message.
+HISTORY_PLUGIN_ERROR_MESSAGE = "No history plugin set. Set plugin before operations."
+
+logger = logging.getLogger(__name__)
 
 
 class HistoryManager:
     """Manages history operations by delegating to a specific history implementation.
 
     Example:
-        >>> effective_user_id = 1000
-        >>> manager = HistoryManager(config, effective_user_id, plugin=LocalHistory)
-        >>> entries = manager.read()
-        >>> manager.write("How do I check disk space?", "Use df -h command...")
+        >>> user_id = "a658710c-de6d-11ef-ae5b-52b437312584"
+        >>> chat_id = "af83c6d2-de6d-11ef-ac4d-52b437312584"
+        >>> manager = HistoryManager(config, plugin=LocalHistory)
+        >>> entries = manager.read(user_id)
+        >>> manager.write(chat_id, user_id, "How do I check disk space?", "Use df -h command...")
         >>> manager.clear()
     """
 
     def __init__(
         self,
         config: Config,
-        effective_user_id: int,
         plugin: Optional[Type[BaseHistoryPlugin]] = None,
     ) -> None:
         """Initialize the history manager.
 
-        Args:
+        Arguments:
             config (Config): Instance of configuration class
-            effective_user_id (int): The effective user id who asked for the history.
+            user_id (int): The effective user id who asked for the history.
             plugin (Optional[Type[BaseHistory]], optional): Optional history implementation class
         """
         self._config = config
         self._plugin: Optional[Type[BaseHistoryPlugin]] = None
         self._instance: Optional[BaseHistoryPlugin] = None
-        self._session_manager = UserSessionManager(effective_user_id)
 
         # Set initial plugin if provided
         if plugin:
             self.plugin = plugin
+
+    def _check_if_history_is_enabled(self) -> None:
+        """Check if the history is enabled in the configuration file.
+
+        Raises:
+            HistoryNotEnabledError: If history is not enabled in the configuration file.
+        """
+        if not self._config.history.enabled:
+            raise HistoryNotEnabledError("History is not enabled.")
 
     @property
     def plugin(self) -> Optional[Type[BaseHistoryPlugin]]:
@@ -53,7 +68,7 @@ class HistoryManager:
     def plugin(self, plugin_cls: Type[BaseHistoryPlugin]) -> None:
         """Set and initialize a new plugin.
 
-        Args:
+        Arguments:
             plugin_cls (Type[BaseHistory]): History implementation class to use
 
         Raises:
@@ -67,24 +82,30 @@ class HistoryManager:
         self._plugin = plugin_cls
         self._instance = plugin_cls(self._config)
 
-    def read(self) -> list[dict[str, str]]:
+    def read(self, user_id: str) -> list[HistoryModel]:
         """Read history entries using the current plugin.
+
+        Arguments:
+            user_id (str): The user's identifier
 
         Raises:
             RuntimeError: If no plugin is set
 
         Returns:
-            HistoryModel: Result from the database.
+            Union[list, Sequence[Any]]: List of history entries
         """
         if not self._instance:
-            raise RuntimeError("No history plugin set. Set plugin before operations.")
+            raise RuntimeError(HISTORY_PLUGIN_ERROR_MESSAGE)
 
-        return self._instance.read(self._session_manager.user_id)
+        self._check_if_history_is_enabled()
+        return self._instance.read(user_id)
 
-    def write(self, query: str, response: str) -> None:
+    def write(self, chat_id: str, user_id: str, query: str, response: str) -> None:
         """Write a new history entry using the current plugin.
 
-        Args:
+        Arguments:
+            chat_id (str): The chat's identifier
+            user_id (str): The user's identifier
             query (str): The user's query
             response (str): The LLM's response
 
@@ -92,17 +113,22 @@ class HistoryManager:
             RuntimeError: If no plugin is set
         """
         if not self._instance:
-            raise RuntimeError("No history plugin set. Set plugin before operations.")
+            raise RuntimeError(HISTORY_PLUGIN_ERROR_MESSAGE)
 
-        self._instance.write(self._session_manager.user_id, query, response)
+        self._check_if_history_is_enabled()
+        self._instance.write(chat_id, user_id, query, response)
 
-    def clear(self) -> None:
+    def clear(self, user_id: str) -> None:
         """Clear all history entries.
+
+        Arguments:
+            user_id (str): The user's identifier
 
         Raises:
             RuntimeError: If no plugin is set
         """
         if not self._instance:
-            raise RuntimeError("No history plugin set. Set plugin before operations.")
+            raise RuntimeError(HISTORY_PLUGIN_ERROR_MESSAGE)
 
-        self._instance.clear(self._session_manager.user_id)
+        self._check_if_history_is_enabled()
+        self._instance.clear(user_id)
