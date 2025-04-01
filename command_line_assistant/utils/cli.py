@@ -187,6 +187,8 @@ def create_subparser(parser: SubParsersAction, name: str, help: str) -> Argument
         name,
         help=help,
         add_help=False,
+        # Disable abbreviated argument matching. This prevents partial strings from matching to valid options (for example, --from matching to --from-chat).
+        allow_abbrev=False,
     )
     custom_parser.add_argument(
         "-h",
