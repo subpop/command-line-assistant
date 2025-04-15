@@ -25,7 +25,7 @@ from command_line_assistant.utils.cli import (
     SubParsersAction,
     create_subparser,
 )
-from command_line_assistant.utils.files import create_folder, write_file
+from command_line_assistant.utils.files import NamedFileLock, create_folder, write_file
 from command_line_assistant.utils.renderers import (
     create_error_renderer,
 )
@@ -145,14 +145,23 @@ class EnableTerminalCapture(BaseShellOperation):
 
     def execute(self) -> None:
         """Default method to execute the operation"""
-        self.text_renderer.render(
-            "Starting terminal reader. Press Ctrl + D to stop the capturing."
-        )
-        self.text_renderer.render(
-            f"Terminal capture log is being written to {TERMINAL_CAPTURE_FILE}"
-        )
-        self._initialize_bash_folder()
-        start_capturing()
+        file_lock = NamedFileLock(name="terminal")
+
+        if file_lock.is_locked:
+            raise ShellCommandException(
+                f"Detected a terminal capture session running with pid '{file_lock.pid}'."
+                " In order to start a new terminal capture session, you must stop the previous one."
+            )
+
+        with file_lock:
+            self.text_renderer.render(
+                "Starting terminal reader. Press Ctrl + D to stop the capturing."
+            )
+            self.text_renderer.render(
+                f"Terminal capture log is being written to {TERMINAL_CAPTURE_FILE}"
+            )
+            self._initialize_bash_folder()
+            start_capturing()
 
 
 class ShellCommand(BaseCLICommand):
@@ -177,7 +186,7 @@ class ShellCommand(BaseCLICommand):
             return 0
         except ShellCommandException as e:
             logger.info("Failed to execute shell command: %s", str(e))
-            error_renderer.render(f"Failed to execute shell command: {str(e)}")
+            error_renderer.render(str(e))
             return 1
 
 
@@ -201,7 +210,11 @@ def register_subcommand(parser: SubParsersAction):
     interactive_mode.add_argument(
         "--enable-interactive",
         action="store_true",
-        help="Enable the shell integration for interactive mode on the system. Currently, only BASH is supported. After the interactive was sourced, hit Ctrl + G in your terminal to enable interactive mode.",
+        help=(
+            "Enable the shell integration for interactive mode on the system. "
+            "Currently, only BASH is supported. After the interactive was "
+            "sourced, hit Ctrl + G in your terminal to enable interactive mode."
+        ),
     )
     interactive_mode.add_argument(
         "--disable-interactive",
