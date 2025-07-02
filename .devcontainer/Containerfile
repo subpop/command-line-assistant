@@ -1,0 +1,18 @@
+# Use CentOS Stream 10 as the base image
+FROM quay.io/fedora/fedora:42
+
+# Install Python, pip, and development tools
+RUN dnf install -y \
+    python3-pip \
+    'pkgconfig(cairo)' \
+    'pkgconfig(cairo-gobject)' \
+    'pkgconfig(gobject-introspection-1.0)' \
+    'pkgconfig(mariadb)' \
+    /usr/bin/pg_config && \
+    dnf clean all
+
+# Upgrade pip
+RUN python -m pip install --upgrade pip
+
+# Set up a working directory
+WORKDIR /workspace
