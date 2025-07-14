@@ -1,0 +1,24 @@
+version: 2
+updates:
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+    target-branch: "main"
+    reviewers:
+      - "@rhel-lightspeed/developers"
+    allow:
+      - dependency-name: "*"
+    ignore:
+      - dependency-name: "requests"
+        versions: [">2.25.1"]
+      - dependency-name: "sqlalchemy"
+        versions: [">1.4.45"]
+      - dependency-name: "dasbus"
+        versions: [">1.4"]
+    labels:
+      - "kind/dependencies"
+      - "skip/changelog"
+      - "tests/skip"
