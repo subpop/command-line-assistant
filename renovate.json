@@ -14,5 +14,40 @@
       "tests/skip"
     ]
   },
-  "dependencyDashboard": true
+  "dependencyDashboard": true,
+  "packageRules": [
+    {
+      "description": "Limit requests to <= 2.25.1",
+      "matchPackageNames": [
+        "requests"
+      ],
+      "matchDatasource": "custom.centos-9-stream-appstream",
+      "extractVersion": "^python3\\.12-requests-(?<version>.*)-[\\d]+\\.el9\\.src\\.rpm$",
+      "allowedVersions": "<=2.25.1"
+    },
+    {
+      "description": "Limit sqlalchemy to <= 1.4.45",
+      "matchPackageNames": [
+        "sqlalchemy"
+      ],
+      "matchDatasource": "custom.centos-9-stream-appstream",
+      "extractVersion": "^python-sqlalchemy-(?<version>.*)-[\\d]+\\.el9\\.src\\.rpm$",
+      "allowedVersions": "<=1.4.45"
+    },
+    {
+      "description": "Limit dasbus to <= 1.4",
+      "matchPackageNames": [
+        "dasbus"
+      ],
+      "matchDatasource": "custom.centos-9-stream-appstream",
+      "extractVersion": "^python-dasbus-(?<version>.*)-[\\d]+\\.el9\\.src\\.rpm$",
+      "allowedVersions": "<=1.4"
+    }
+  ],
+  "customDataSources": {
+    "centos-9-stream-appstream": {
+      "defaultRegistryUrlTemplate": "https://mirror.stream.centos.org/9-stream/AppStream/source/tree/Packages/",
+      "format": "html"
+    }
+  }
 }
