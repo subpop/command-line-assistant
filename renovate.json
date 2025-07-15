@@ -3,16 +3,16 @@
   "extends": [
     "config:best-practices"
   ],
-  "poetry": {
-    "enabled": true,
-    "schedule": [
-      "after 5am"
-    ],
-    "labels": [
-      "kind/dependencies",
-      "skip/changelog",
-      "tests/skip"
-    ]
+  "python": {
+    "enabled": false
   },
+  "schedule": [
+    "after 5am"
+  ],
+  "labels": [
+    "kind/dependencies",
+    "skip/changelog",
+    "tests/skip"
+  ],
   "dependencyDashboard": true
 }
