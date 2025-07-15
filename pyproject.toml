@@ -12,9 +12,9 @@ maintainers = [
 dependencies = [
     # tomli is only required below 3.11 as it is native after that version.
     'tomli; python_version<"3.11"',
-    "requests==2.32.3",
-    "dasbus==1.7",
-    "sqlalchemy==2.0.38",
+    "requests==2.25.1",
+    "dasbus==1.4",
+    "sqlalchemy==1.4.45",
 ]
 requires-python = ">=3.9,<4.0" # RHEL 9 and 10
 readme = "README.md"
@@ -29,9 +29,24 @@ requires = ["setuptools", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project.optional-dependencies]
-dev = ["pytest==8.4.1", "pytest-cov==6.2.1", "pytest-randomly==3.16.0", "coverage==7.9.2", "pytest-sugar==1.0.0", "pytest-clarity==1.0.1", "tox==4.27.0", "responses==0.25.7", "PyGObject==3.50.0"]
-docs = ["sphinx==7.4.7", "sphinx-autodoc-typehints==2.3.0", "sphinx-rtd-theme==3.0.2", "sphinx-argparse-cli==1.17.0"]
-db = ["psycopg2_binary==2.9.10", "mysqlclient==2.2.7"]
+dev = [
+    "pytest",
+    "pytest-cov",
+    "pytest-randomly",
+    "coverage",
+    "pytest-sugar",
+    "pytest-clarity",
+    "tox",
+    "responses",
+    "PyGObject",
+]
+docs = [
+    "sphinx",
+    "sphinx-autodoc-typehints",
+    "sphinx-rtd-theme",
+    "sphinx-argparse-cli",
+]
+db = ["psycopg2_binary", "mysqlclient"]
 
 [tool.setuptools.packages.find]
 include = ["command_line_assistant*"]

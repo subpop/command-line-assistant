@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 
 import pytest
-from sqlalchemy import Column, Row, Text
+from sqlalchemy import Column, Text
 
 from command_line_assistant.daemon.database.manager import DatabaseManager
 from command_line_assistant.daemon.database.models.base import BaseModel
@@ -30,7 +30,8 @@ def base_repository(mock_config):
 
 def test_insert(base_repository):
     result = base_repository.insert({"name": "test"})
-    assert isinstance(result, Row)
+    # Check that result is indexable.
+    assert hasattr(result, "__getitem__")
     assert isinstance(result[0], uuid.UUID)
 
 
