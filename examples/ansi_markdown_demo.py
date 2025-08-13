@@ -22,7 +22,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 def main():
     """Main demo function."""
     try:
-        from command_line_assistant.markdown import markdown_to_ansi
+        from command_line_assistant.rendering.markdown import markdown_to_ansi
     except ImportError as e:
         print(f"Error: {e}")
         print("Please install python-markdown: pip install markdown")

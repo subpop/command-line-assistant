@@ -1,4 +1,4 @@
-from command_line_assistant.formatting import wrap
+from command_line_assistant.rendering.formatting import wrap
 
 
 def test_wrap_text_to_terminal_width(monkeypatch):

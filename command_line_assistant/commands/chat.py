@@ -9,7 +9,6 @@ from enum import auto
 from io import TextIOWrapper
 from typing import ClassVar, Optional
 
-from command_line_assistant.colors import Color, colorize
 from command_line_assistant.commands.base import (
     BaseCLICommand,
     BaseOperation,
@@ -33,13 +32,11 @@ from command_line_assistant.dbus.structures.chat import (
     TerminalInput,
 )
 from command_line_assistant.exceptions import ChatCommandException, StopInteractiveMode
-from command_line_assistant.formatting import truncate, wrap
-from command_line_assistant.markdown import markdown_to_ansi
-from command_line_assistant.rendering.decorators.colors import ColorDecorator
+from command_line_assistant.rendering.colors import Color, colorize
+from command_line_assistant.rendering.formatting import truncate, wrap
 from command_line_assistant.rendering.renders.interactive import InteractiveRenderer
-from command_line_assistant.rendering.renders.markdown import MarkdownRenderer
 from command_line_assistant.rendering.renders.spinner import SpinnerRenderer
-from command_line_assistant.rendering.renders.text import TextRenderer
+from command_line_assistant.rendering.streaming import MarkdownStreamer
 from command_line_assistant.terminal.parser import (
     find_output_by_index,
     parse_terminal_output,
@@ -58,12 +55,8 @@ from command_line_assistant.utils.files import (
     write_file,
 )
 from command_line_assistant.utils.renderers import (
-    create_error_renderer,
     create_interactive_renderer,
-    create_markdown_renderer,
     create_spinner_renderer,
-    create_text_renderer,
-    create_warning_renderer,
     format_datetime,
     human_readable_size,
 )
@@ -197,15 +190,11 @@ class BaseChatOperation(BaseOperation):
 
     Attributes:
         spinner_renderer (SpinnerRenderer): The instance of a spinner renderer
-        notice_renderer (TextRenderer): Instance of text renderer to show notice message
         interactive_renderer (InteractiveRenderer): Instance of interactive renderer to handle interactive mode
     """
 
     def __init__(
         self,
-        text_renderer: TextRenderer,
-        warning_renderer: TextRenderer,
-        error_renderer: TextRenderer,
         args: Namespace,
         context: CommandContext,
         chat_proxy: ChatInterface,
@@ -215,9 +204,6 @@ class BaseChatOperation(BaseOperation):
         """Constructor of the class.
 
         Arguments:
-            text_renderer (TextRenderer): Instance of text renderer class
-            warning_renderer (TextRenderer): Instance of text renderer class
-            error_renderer (TextRenderer): Instance of text renderer class
             args (Namespace): The arguments from CLI
             context (CommandContext): Context for the commands
             chat_proxy (ChatInterface): The proxy object for dbus chat
@@ -225,9 +211,6 @@ class BaseChatOperation(BaseOperation):
             user_proxy (HistoryInterface): The proxy object for dbus user
         """
         super().__init__(
-            text_renderer,
-            warning_renderer,
-            error_renderer,
             args,
             context,
             chat_proxy,
@@ -238,14 +221,7 @@ class BaseChatOperation(BaseOperation):
             message="Asking RHEL Lightspeed",
             plain=hasattr(args, "plain") and args.plain,
         )
-        self.notice_renderer: TextRenderer = create_text_renderer(
-            decorators=[ColorDecorator(foreground="lightyellow")],
-            plain=hasattr(args, "plain") and args.plain,
-        )
         self.interactive_renderer: InteractiveRenderer = create_interactive_renderer()
-        self.markdown_renderer: MarkdownRenderer = create_markdown_renderer(
-            plain=hasattr(args, "plain") and args.plain
-        )
 
     def _display_response(self, response: str) -> None:
         """Internal method to display message to the terminal
@@ -254,14 +230,13 @@ class BaseChatOperation(BaseOperation):
             response(str): The message to be displayed
         """
         if _handle_legal_message():
-            print(colorize(wrap(LEGAL_NOTICE), Color.BRIGHT_YELLOW))
+            self.write_info_line(LEGAL_NOTICE)
 
-        print(truncate(markdown_to_ansi("---")))
+        self.write_line(truncate("---"))
+        self.write_line(response)
+        self.write_line(truncate("---"))
 
-        print(markdown_to_ansi(response))
-
-        print(truncate(markdown_to_ansi("---")))
-        print(colorize(wrap(ALWAYS_LEGAL_MESSAGE), Color.BRIGHT_YELLOW))
+        self.write_info_line(ALWAYS_LEGAL_MESSAGE)
 
     @timing.timeit
     def _submit_question(
@@ -337,7 +312,7 @@ class BaseChatOperation(BaseOperation):
             # If the value is larger than the maximum size, we need to trim it down
             readable_size = human_readable_size(len(value))
             max_question_size = human_readable_size(MAX_QUESTION_SIZE)
-            self.warning_renderer.render(
+            self.write_warning_line(
                 f"The total size of your input from '{source}' (approximately {readable_size}) exceeds the limit of {max_question_size}. "
                 "Trimming it down to fit in the expected size, you may lose some context."
             )
@@ -436,12 +411,12 @@ class ListChatsOperation(BaseChatOperation):
         user_id = self.user_proxy.GetUserId(self.context.effective_user_id)
         all_chats = ChatList.from_structure(self.chat_proxy.GetAllChatFromUser(user_id))
         if not all_chats.chats:
-            self.text_renderer.render("No chats available.")
+            self.write_line("No chats available.")
 
-        self.text_renderer.render(f"Found a total of {len(all_chats.chats)} chats:")
+        self.write_line(f"Found a total of {len(all_chats.chats)} chats:")
         for index, chat in enumerate(all_chats.chats):
             created_at = format_datetime(chat.created_at)
-            self.text_renderer.render(
+            self.write_line(
                 f"{index}. Chat: {chat.name} - {chat.description} (created at: {created_at})"
             )
 
@@ -455,7 +430,7 @@ class DeleteChatOperation(BaseChatOperation):
         try:
             user_id = self.user_proxy.GetUserId(self.context.effective_user_id)
             self.chat_proxy.DeleteChatForUser(user_id, self.args.delete)
-            self.text_renderer.render(f"Chat {self.args.delete} deleted successfully.")
+            self.write_line(f"Chat {self.args.delete} deleted successfully.")
         except ChatNotFoundError as e:
             raise ChatCommandException(
                 f"Failed to delete requested chat {str(e)}"
@@ -471,7 +446,7 @@ class DeleteAllChatsOperation(BaseChatOperation):
         try:
             user_id = self.user_proxy.GetUserId(self.context.effective_user_id)
             self.chat_proxy.DeleteAllChatForUser(user_id)
-            self.text_renderer.render("Deleted all chats successfully.")
+            self.write_line("Deleted all chats successfully.")
         except ChatNotFoundError as e:
             raise ChatCommandException(
                 f"Failed to delete all requested chats {str(e)}"
@@ -506,7 +481,7 @@ class InteractiveChatOperation(BaseChatOperation):
                 self.interactive_renderer.render(">>> ")
                 question = self.interactive_renderer.output
                 if not question:
-                    self.error_renderer.render(
+                    self.write_error_line(
                         "Your question can't be empty. Please, try again."
                     )
                     continue
@@ -616,19 +591,11 @@ class ChatCommand(BaseCLICommand):
         Returns:
             int: Status code of the execution
         """
-        error_renderer = create_error_renderer(
-            plain=hasattr(self._args, "plain") and self._args.plain
-        )
         operation_factory = ChatOperationFactory()
         try:
             operation = operation_factory.create_operation(
                 self._args,
                 self._context,
-                text_renderer=create_text_renderer(
-                    decorators=[ColorDecorator()],
-                    plain=hasattr(self._args, "plain") and self._args.plain,
-                ),
-                error_renderer=error_renderer,
             )
 
             if operation:
@@ -636,7 +603,7 @@ class ChatCommand(BaseCLICommand):
             return 0
         except ChatCommandException as e:
             logger.info("Failed to execute chat command: %s", str(e))
-            error_renderer.render(str(e))
+            self.write_error_line(str(e))
             return e.code
 
 
@@ -730,7 +697,7 @@ def _command_factory(args: Namespace) -> ChatCommand:
         logger.debug("Original index is %s", args.with_output)
         args.with_output = -abs(args.with_output)
 
-    warning_renderer = create_warning_renderer()
+    warning_renderer = MarkdownStreamer()
 
     # Overriding the default description in case the user has not given us any.
     # We don't log this as warning to avoid spamming the user terminal with
@@ -742,16 +709,26 @@ def _command_factory(args: Namespace) -> ChatCommand:
 
     if not args.description and args.name:
         args.description = DEFAULT_CHAT_DESCRIPTION
-        warning_renderer.render(
-            "Chat description not provided. Using the default description: "
-            f"'{DEFAULT_CHAT_DESCRIPTION}'. You can specify a custom description using the '--description' option."
+        warning_renderer.add_line_chunk(
+            wrap(
+                colorize(
+                    "Chat description not provided. Using the default description: "
+                    f"'{DEFAULT_CHAT_DESCRIPTION}'. You can specify a custom description using the '--description' option.",
+                    Color.BRIGHT_YELLOW,
+                )
+            )
         )
 
     if not args.name and args.description:
         args.name = DEFAULT_CHAT_NAME
-        warning_renderer.render(
-            "Chat name not provided. Using the default name: "
-            f"'{DEFAULT_CHAT_NAME}'. You can specify a custom name using the '--name' option."
+        warning_renderer.add_line_chunk(
+            wrap(
+                colorize(
+                    "Chat name not provided. Using the default name: "
+                    f"'{DEFAULT_CHAT_NAME}'. You can specify a custom name using the '--name' option.",
+                    Color.BRIGHT_YELLOW,
+                )
+            )
         )
 
     return ChatCommand(args)

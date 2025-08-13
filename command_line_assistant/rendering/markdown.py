@@ -15,8 +15,8 @@ from markdown.blockprocessors import BlockProcessor
 from markdown.extensions import Extension
 from markdown.treeprocessors import Treeprocessor
 
-from command_line_assistant.colors import Color, Style, colorize, stylize
-from command_line_assistant.formatting import wrap
+from command_line_assistant.rendering.colors import Color, Style, colorize, stylize
+from command_line_assistant.rendering.formatting import wrap
 
 
 class ANSIRenderer:

@@ -1,7 +1,7 @@
 import markdown
 import pytest
 
-from command_line_assistant.markdown import (
+from command_line_assistant.rendering.markdown import (
     ANSIExtension,
     ANSIMarkdown,
     ANSIRenderer,
