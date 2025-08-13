@@ -31,10 +31,9 @@ from command_line_assistant.dbus.structures.chat import (
     SystemInfo,
     TerminalInput,
 )
-from command_line_assistant.exceptions import ChatCommandException, StopInteractiveMode
+from command_line_assistant.exceptions import ChatCommandException
 from command_line_assistant.rendering.colors import Color, colorize
 from command_line_assistant.rendering.formatting import truncate, wrap
-from command_line_assistant.rendering.renders.interactive import InteractiveRenderer
 from command_line_assistant.rendering.renders.spinner import SpinnerRenderer
 from command_line_assistant.rendering.streaming import MarkdownStreamer
 from command_line_assistant.terminal.parser import (
@@ -55,7 +54,6 @@ from command_line_assistant.utils.files import (
     write_file,
 )
 from command_line_assistant.utils.renderers import (
-    create_interactive_renderer,
     create_spinner_renderer,
     format_datetime,
     human_readable_size,
@@ -190,7 +188,6 @@ class BaseChatOperation(BaseOperation):
 
     Attributes:
         spinner_renderer (SpinnerRenderer): The instance of a spinner renderer
-        interactive_renderer (InteractiveRenderer): Instance of interactive renderer to handle interactive mode
     """
 
     def __init__(
@@ -221,7 +218,6 @@ class BaseChatOperation(BaseOperation):
             message="Asking RHEL Lightspeed",
             plain=hasattr(args, "plain") and args.plain,
         )
-        self.interactive_renderer: InteractiveRenderer = create_interactive_renderer()
 
     def _display_response(self, response: str) -> None:
         """Internal method to display message to the terminal
@@ -468,40 +464,48 @@ class InteractiveChatOperation(BaseChatOperation):
                 " Interactive chat mode is not available while terminal capture is active, you must stop the previous one."
             )
 
-        try:
-            user_id = self.user_proxy.GetUserId(self.context.effective_user_id)
-            chat_id = self._create_chat_session(
-                user_id, self.args.name, self.args.description
-            )
-            attachment = _parse_attachment_file(self.args.attachment)
-            attachment_mimetype = guess_mimetype(self.args.attachment)
-            stdin = self.args.stdin
+        user_id = self.user_proxy.GetUserId(self.context.effective_user_id)
+        chat_id = self._create_chat_session(
+            user_id, self.args.name, self.args.description
+        )
+        attachment = _parse_attachment_file(self.args.attachment)
+        attachment_mimetype = guess_mimetype(self.args.attachment)
+        stdin = self.args.stdin
 
-            while True:
-                self.interactive_renderer.render(">>> ")
-                question = self.interactive_renderer.output
-                if not question:
-                    self.write_error_line(
-                        "Your question can't be empty. Please, try again."
-                    )
-                    continue
-                response = self._submit_question(
-                    user_id=user_id,
-                    chat_id=chat_id,
-                    question=question,
-                    stdin=stdin,
-                    attachment=attachment,
-                    attachment_mimetype=attachment_mimetype,
-                    # For now, we won't deal with last output in interactive mode.
-                    last_output="",
+        # Display initial banner
+        self.write_line(
+            "Welcome to the interactive mode for command line assistant! To exit, press Ctrl + C or type '.exit'."
+        )
+        self.write_info_line("The current session does not include running context.")
+
+        while True:
+            try:
+                question = input(">>> ").strip()
+            except (EOFError, KeyboardInterrupt) as e:
+                raise ChatCommandException(
+                    "Detected keyboard interrupt. Stopping interactive mode."
+                ) from e
+
+            # Handle special commands
+            if question == ".exit":
+                return
+
+            if not question:
+                self.write_error_line(
+                    "Your question can't be empty. Please, try again."
                 )
-                self._display_response(response)
-        except (KeyboardInterrupt, EOFError) as e:
-            raise ChatCommandException(
-                "Detected keyboard interrupt. Stopping interactive mode."
-            ) from e
-        except StopInteractiveMode:
-            return
+                continue
+            response = self._submit_question(
+                user_id=user_id,
+                chat_id=chat_id,
+                question=question,
+                stdin=stdin,
+                attachment=attachment,
+                attachment_mimetype=attachment_mimetype,
+                # For now, we won't deal with last output in interactive mode.
+                last_output="",
+            )
+            self._display_response(response)
 
 
 @ChatOperationFactory.register(ChatOperationType.SINGLE_QUESTION)
