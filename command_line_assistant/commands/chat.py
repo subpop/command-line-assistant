@@ -32,9 +32,9 @@ from command_line_assistant.dbus.structures.chat import (
     TerminalInput,
 )
 from command_line_assistant.exceptions import ChatCommandException
+from command_line_assistant.rendering.animation import Spinner
 from command_line_assistant.rendering.colors import Color, colorize
 from command_line_assistant.rendering.formatting import truncate, wrap
-from command_line_assistant.rendering.renders.spinner import SpinnerRenderer
 from command_line_assistant.rendering.streaming import MarkdownStreamer
 from command_line_assistant.terminal.parser import (
     find_output_by_index,
@@ -54,7 +54,6 @@ from command_line_assistant.utils.files import (
     write_file,
 )
 from command_line_assistant.utils.renderers import (
-    create_spinner_renderer,
     format_datetime,
     human_readable_size,
 )
@@ -187,7 +186,7 @@ class BaseChatOperation(BaseOperation):
     """Base class for handling chat operations
 
     Attributes:
-        spinner_renderer (SpinnerRenderer): The instance of a spinner renderer
+        progress_renderer (ChatProgressiveMarkdownStreamer): The instance of a progressive markdown streamer
     """
 
     def __init__(
@@ -213,10 +212,6 @@ class BaseChatOperation(BaseOperation):
             chat_proxy,
             history_proxy,
             user_proxy,
-        )
-        self.spinner_renderer: SpinnerRenderer = create_spinner_renderer(
-            message="Asking RHEL Lightspeed",
-            plain=hasattr(args, "plain") and args.plain,
         )
 
     def _display_response(self, response: str) -> None:
@@ -265,12 +260,15 @@ class BaseChatOperation(BaseOperation):
             question, stdin, " ".join(attachment.split()[::-1]), last_output
         )
 
-        with self.spinner_renderer:
-            response = self._get_response(
-                user_id=user_id,
-                attachment_mimetype=attachment_mimetype,
-                **sources,
-            )
+        try:
+            with Spinner(message="Asking RHEL Lightspeed"):
+                response = self._get_response(
+                    user_id=user_id,
+                    attachment_mimetype=attachment_mimetype,
+                    **sources,
+                )
+        except KeyboardInterrupt as e:
+            raise ChatCommandException("Detected keyboard interrupt. Exiting...") from e
         try:
             self.history_proxy.WriteHistory(chat_id, user_id, question, response)
         except HistoryNotEnabledError:
