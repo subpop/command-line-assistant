@@ -60,7 +60,7 @@ source = { editable = "." }
 dependencies = [
     { name = "dasbus", version = "1.5", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.10'" },
     { name = "dasbus", version = "1.7", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
-    { name = "pygobject", version = "3.40.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.10'" },
+    { name = "pygobject", version = "3.40.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.10'" },
     { name = "pygobject", version = "3.46.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
     { name = "requests" },
     { name = "sqlalchemy" },
@@ -92,12 +92,12 @@ docs = [
 [package.metadata]
 requires-dist = [
     { name = "coverage", marker = "extra == 'dev'" },
-    { name = "dasbus", marker = "python_full_version < '3.10'", specifier = "==1.5" },
-    { name = "dasbus", marker = "python_full_version >= '3.12'", specifier = "==1.7" },
+    { name = "dasbus", marker = "python_full_version < '3.10'", specifier = "~=1.4" },
+    { name = "dasbus", marker = "python_full_version >= '3.12'", specifier = "~=1.7" },
     { name = "mysqlclient", marker = "extra == 'db'" },
     { name = "psycopg2-binary", marker = "extra == 'db'" },
-    { name = "pygobject", marker = "python_full_version < '3.10'", specifier = "==3.40" },
-    { name = "pygobject", marker = "python_full_version >= '3.12'", specifier = "==3.46" },
+    { name = "pygobject", marker = "python_full_version < '3.10'", specifier = "~=3.40.1" },
+    { name = "pygobject", marker = "python_full_version >= '3.12'", specifier = "~=3.46" },
     { name = "pytest", marker = "extra == 'dev'" },
     { name = "pytest-clarity", marker = "extra == 'dev'" },
     { name = "pytest-cov", marker = "extra == 'dev'" },
@@ -621,7 +621,7 @@ wheels = [
 
 [[package]]
 name = "pygobject"
-version = "3.40.0"
+version = "3.40.1"
 source = { registry = "https://pypi.org/simple" }
 resolution-markers = [
     "python_full_version < '3.11'",
@@ -629,7 +629,7 @@ resolution-markers = [
 dependencies = [
     { name = "pycairo", marker = "python_full_version < '3.11'" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/a0/fa/0cfaa64ad7a4cd94fd74b698fcc8987ed780fce1651fecc6604f86f604cd/PyGObject-3.40.0.tar.gz", hash = "sha256:98d83f71e6313dadc29793450fec23b2eaa5c3f1c4b073d0a4f9c31b5cdb5fca", size = 714708, upload-time = "2021-03-19T13:50:21.71Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/51/2f/4d5d5afb7000b9151e33952b59163c9389bd867ac6fe85d62f85831fa061/PyGObject-3.40.1.tar.gz", hash = "sha256:6fb599aa59ceb9dd05fafb0d72b3862943e7d5e85c8ef6c74856bc6d4321cbab", size = 714934, upload-time = "2021-03-30T06:50:38.239Z" }
 
 [[package]]
 name = "pygobject"
