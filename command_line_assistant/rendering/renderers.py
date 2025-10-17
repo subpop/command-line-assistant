@@ -1,5 +1,6 @@
 """Utility module that provides standardized functions for rendering"""
 
+import sys
 from datetime import datetime
 from typing import Optional
 
@@ -56,6 +57,7 @@ class Renderer:
         """
         self._plain = plain
         self._stream_writer: StreamWriter = StreamWriter(theme=theme)
+        self._error_writer: StreamWriter = StreamWriter(sys.stderr, theme=theme)
         self._theme = theme or Theme()
 
     def normal(self, message: str) -> None:
@@ -108,9 +110,9 @@ class Renderer:
             message: Text to render
         """
         if self._plain:
-            self._stream_writer.write_line(message)
+            self._error_writer.write_line(message)
         else:
-            self._stream_writer.write_line("🙁 " + colorize(message, self._theme.error))
+            self._error_writer.write_line("🙁 " + colorize(message, self._theme.error))
 
     def markdown(self, message: str) -> None:
         """Render markdown formatted text.

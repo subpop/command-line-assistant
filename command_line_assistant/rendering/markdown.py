@@ -11,13 +11,20 @@ from typing import Dict, List, Optional
 from xml.etree import ElementTree as etree
 
 import markdown
-from markdown.blockprocessors import BlockProcessor
 from markdown.extensions import Extension
+from markdown.postprocessors import Postprocessor
+from markdown.preprocessors import Preprocessor
 from markdown.treeprocessors import Treeprocessor
 
 from command_line_assistant.rendering.colors import Style, colorize, stylize
 from command_line_assistant.rendering.formatting import wrap
 from command_line_assistant.rendering.theme import Theme
+
+# Constants
+MIN_TABLE_COLUMN_WIDTH = 3
+TABLE_CELL_PADDING = 2
+HORIZONTAL_RULE_LENGTH = 60
+DEFAULT_LIST_INDEX = 1
 
 
 class ANSIRenderer:
@@ -53,17 +60,28 @@ class ANSIRenderer:
 
     def code_block(self, text: str, language: str = "") -> str:
         """Format code block."""
-        lang_text = f" {language} snippet " if language else ""
         lines = [
             colorize(line, self.theme.code_block_line)
             for line in text.rstrip().split("\n")
         ]
         longest_line_length = max(len(line) for line in text.rstrip().split("\n"))
-        padding = longest_line_length - len(lang_text) + 6
-        header = colorize(f"──{lang_text}{'─' * padding}", self.theme.code_block_border)
-        footer = colorize(
-            f"{'─' * (padding + len(lang_text) + 2)}", self.theme.code_block_border
-        )
+
+        if language:
+            lang_text = f" {language} snippet "
+            padding = longest_line_length - len(lang_text) + 6
+            # Color the border and language name separately
+            header = (
+                colorize("──", self.theme.code_block_border)
+                + colorize(lang_text, self.theme.header)
+                + colorize("─" * padding, self.theme.code_block_border)
+            )
+            footer_length = padding + len(lang_text) + 2
+        else:
+            padding = longest_line_length + 6
+            header = colorize("─" * (padding + 2), self.theme.code_block_border)
+            footer_length = padding + 2
+
+        footer = colorize("─" * footer_length, self.theme.code_block_border)
         return f"\n{header}\n" + "\n".join(lines) + f"\n{footer}\n"
 
     def header(self, text: str, level: int) -> str:
@@ -88,24 +106,49 @@ class ANSIRenderer:
         quoted_lines = [f"│ {line}" for line in lines]
         return "\n".join(quoted_lines)
 
-    def list_item(self, text: str, ordered: bool = False, index: int = 1) -> str:
+    def list_item(
+        self, text: str, ordered: bool = False, index: int = DEFAULT_LIST_INDEX
+    ) -> str:
         """Format list item."""
-        if ordered:
-            marker = f"{index}."
-        else:
-            marker = "•"
+        marker = f"{index}." if ordered else "•"
         return f"{marker} {text}"
 
     def horizontal_rule(self) -> str:
         """Format horizontal rule."""
-        return f"\n{colorize('─' * 60, self.theme.horizontal_rule)}\n"
+        return (
+            f"\n{colorize('─' * HORIZONTAL_RULE_LENGTH, self.theme.horizontal_rule)}\n"
+        )
 
     def format_table(self, rows: List[List[str]], header_row: bool = True) -> str:
         """Format a complete table with proper column alignment."""
         if not rows:
             return ""
 
-        # Calculate column widths
+        col_widths = self._calculate_column_widths(rows)
+        result = []
+
+        # Top border
+        result.append(self._create_table_border(col_widths, "top"))
+
+        # Process each row
+        for row_idx, row in enumerate(rows):
+            formatted_cells = self._format_table_cells(
+                row, col_widths, row_idx, header_row
+            )
+            row_content = "│" + "│".join(formatted_cells) + "│"
+            result.append(row_content)
+
+            # Add separator after header
+            if row_idx == 0 and header_row and len(rows) > 1:
+                result.append(self._create_table_border(col_widths, "separator"))
+
+        # Bottom border
+        result.append(self._create_table_border(col_widths, "bottom"))
+
+        return "\n" + "\n".join(result) + "\n"
+
+    def _calculate_column_widths(self, rows: List[List[str]]) -> List[int]:
+        """Calculate the width of each column in the table."""
         num_cols = len(rows[0])
         col_widths = []
 
@@ -113,68 +156,52 @@ class ANSIRenderer:
             max_width = 0
             for row in rows:
                 if col < len(row):
-                    # Remove ANSI codes for width calculation
                     clean_text = self._strip_ansi(row[col])
                     max_width = max(max_width, len(clean_text))
-            # Minimum width of 3, add padding
-            col_widths.append(max(3, max_width + 2))
+            col_widths.append(
+                max(MIN_TABLE_COLUMN_WIDTH, max_width + TABLE_CELL_PADDING)
+            )
 
-        result = []
+        return col_widths
 
-        # Top border
-        top_border = "┌"
+    def _create_table_border(self, col_widths: List[int], border_type: str) -> str:
+        """Create a table border line (top, separator, or bottom)."""
+        border_chars = {
+            "top": ("┌", "┬", "┐", "─"),
+            "separator": ("├", "┼", "┤", "─"),
+            "bottom": ("└", "┴", "┘", "─"),
+        }
+
+        left, middle, right, horizontal = border_chars[border_type]
+        border = left
         for i, width in enumerate(col_widths):
-            top_border += "─" * width
+            border += horizontal * width
             if i < len(col_widths) - 1:
-                top_border += "┬"
-        top_border += "┐"
-        result.append(top_border)
+                border += middle
+        border += right
+        return border
 
-        # Process each row
-        for row_idx, row in enumerate(rows):
-            # Format cells
-            formatted_cells = []
-            for col, cell in enumerate(row):
-                if col < len(col_widths):
-                    clean_text = self._strip_ansi(cell)
-                    padding = col_widths[col] - len(clean_text)
-                    left_pad = padding // 2
-                    right_pad = padding - left_pad
+    def _format_table_cells(
+        self, row: List[str], col_widths: List[int], row_idx: int, header_row: bool
+    ) -> List[str]:
+        """Format all cells in a table row."""
+        formatted_cells = []
+        for col, cell in enumerate(row):
+            if col < len(col_widths):
+                clean_text = self._strip_ansi(cell)
+                padding = col_widths[col] - len(clean_text)
+                left_pad = padding // 2
+                right_pad = padding - left_pad
 
-                    if row_idx == 0 and header_row:
-                        # Header cell
-                        formatted_cell = f"{' ' * left_pad}{colorize(cell, self.theme.header)}{' ' * right_pad}"
-                    else:
-                        # Regular cell
-                        formatted_cell = f"{' ' * left_pad}{cell}{' ' * right_pad}"
-                    formatted_cells.append(formatted_cell)
+                if row_idx == 0 and header_row:
+                    # Header cell
+                    formatted_cell = f"{' ' * left_pad}{colorize(cell, self.theme.header)}{' ' * right_pad}"
+                else:
+                    # Regular cell
+                    formatted_cell = f"{' ' * left_pad}{cell}{' ' * right_pad}"
+                formatted_cells.append(formatted_cell)
 
-            # Row content
-            row_content = "│"
-            row_content += "│".join(formatted_cells)
-            row_content += "│"
-            result.append(row_content)
-
-            # Add separator after header
-            if row_idx == 0 and header_row and len(rows) > 1:
-                sep_border = "├"
-                for i, width in enumerate(col_widths):
-                    sep_border += "─" * width
-                    if i < len(col_widths) - 1:
-                        sep_border += "┼"
-                sep_border += "┤"
-                result.append(sep_border)
-
-        # Bottom border
-        bottom_border = "└"
-        for i, width in enumerate(col_widths):
-            bottom_border += "─" * width
-            if i < len(col_widths) - 1:
-                bottom_border += "┴"
-        bottom_border += "┘"
-        result.append(bottom_border)
-
-        return "\n" + "\n".join(result) + "\n"
+        return formatted_cells
 
     def _strip_ansi(self, text: str) -> str:
         """Strip ANSI escape codes from text for width calculation."""
@@ -184,123 +211,158 @@ class ANSIRenderer:
         return ansi_escape.sub("", text)
 
 
-class FencedCodeBlockProcessor(BlockProcessor):
-    """Block processor that handles fenced code blocks and converts them to <pre><code> elements."""
+class FencedCodePreprocessor(Preprocessor):
+    """Preprocessor that handles fenced code blocks before markdown splits text into blocks.
 
-    # Pattern to match opening fence
-    FENCE_START_RE = re.compile(r"^```(\w*).*$", re.MULTILINE)
-    # Pattern to match closing fence
-    FENCE_END_RE = re.compile(r"^```\s*$", re.MULTILINE)
+    This processor identifies fenced code blocks and stores them with unique markers,
+    preventing markdown from processing the code content. The markers are later replaced
+    by the tree processor.
+    """
 
-    def test(self, parent, block):
-        """Test if this block starts a fenced code block."""
-        return self.FENCE_START_RE.match(block) is not None
+    # Pattern to match fenced code blocks (with optional leading whitespace)
+    FENCED_BLOCK_RE = re.compile(
+        r"^[ \t]*```(?P<lang>[\w#+.-]*)[^\n]*\n"  # Opening fence with optional language
+        r"(?P<code>.*?)"  # Code content (non-greedy)
+        r"^[ \t]*```\s*$",  # Closing fence
+        re.MULTILINE | re.DOTALL,
+    )
 
-    def run(self, parent, blocks):
-        """Process fenced code blocks."""
-        if not blocks:
-            return False
+    def __init__(self, md: markdown.Markdown):
+        """Initialize the preprocessor.
 
-        first_block = blocks[0]
+        Args:
+            md: The Markdown instance
+        """
+        super().__init__(md)
+        # Store code blocks for later retrieval
+        # Using dynamic attribute assignment (type: ignore for mypy)
+        if not hasattr(md, "_code_blocks"):
+            md._code_blocks = {}  # type: ignore[attr-defined]
+        self.code_blocks: Dict[str, Dict[str, str]] = md._code_blocks  # type: ignore[attr-defined]
+        self.counter = 0
 
-        # Check if this block starts with a fence
-        start_match = self.FENCE_START_RE.match(first_block)
-        if not start_match:
-            return False
+    def run(self, lines: List[str]) -> List[str]:
+        """Process fenced code blocks in the text.
 
-        # Extract language from the first line
-        language = start_match.group(1) or ""
+        Args:
+            lines: List of text lines to process
 
-        # Check if the closing fence is in the same block
-        if self.FENCE_END_RE.search(first_block):
-            # Entire code block is in one block
-            blocks.pop(0)
+        Returns:
+            List of processed lines with code blocks replaced by markers
+        """
+        # Join lines into full text for regex matching
+        text = "\n".join(lines)
 
-            lines = first_block.split("\n")
-            code_lines = []
-            in_code = False
+        # Find and replace all fenced code blocks
+        def replace_code_block(match):
+            """Replace a matched code block with a marker."""
+            lang = match.group("lang") or ""
+            code = match.group("code")
 
-            for line in lines:
-                if self.FENCE_START_RE.match(line) and not in_code:
-                    in_code = True
-                    continue
-                elif self.FENCE_END_RE.match(line) and in_code:
-                    break
-                elif in_code:
-                    code_lines.append(line)
+            # Detect and remove base indentation from code
+            code = self._dedent_code(code, match.group(0))
 
-            # Create the <pre><code> structure
-            pre_elem = etree.SubElement(parent, "pre")
-            code_elem = etree.SubElement(pre_elem, "code")
+            # Generate unique marker
+            marker_id = f"CODEBLOCK{self.counter}"
+            self.counter += 1
 
-            # Add language class if specified
-            if language:
-                code_elem.set("class", f"language-{language}")
+            # Store code block data
+            self.code_blocks[marker_id] = {"lang": lang, "code": code}
 
-            # Join all code lines
-            code_content = "\n".join(code_lines).rstrip()
-            code_elem.text = code_content
+            # Return a placeholder that will become a <pre><code> element
+            # Use a format that markdown will parse as HTML
+            code_html = self._create_code_html(code, lang, marker_id)
+            placeholder = self.md.htmlStash.store(code_html)
+            return placeholder
 
-            return True
+        # Replace all fenced code blocks
+        text = self.FENCED_BLOCK_RE.sub(replace_code_block, text)
 
-        # Code block spans multiple blocks
-        # Remove the first block and start collecting content
-        blocks.pop(0)
-        code_parts = []
+        # Return as lines
+        return text.split("\n")
 
-        # Get the content after the opening fence in the first block
-        first_lines = first_block.split("\n")[1:]  # Skip the ```language line
-        first_content = "\n".join(first_lines)
-        code_parts.append(first_content)
+    def _dedent_code(self, code: str, full_match: str) -> str:
+        """Remove base indentation from code block content.
 
-        # Look for the closing fence in subsequent blocks
-        while blocks:
-            current_block = blocks[0]
+        Args:
+            code: The code content
+            full_match: The full matched text including fences
 
-            # Check if this block contains the closing fence
-            if self.FENCE_END_RE.search(current_block):
-                blocks.pop(0)
+        Returns:
+            Code with base indentation removed
+        """
+        # Find the indentation of the opening fence
+        first_line = full_match.split("\n")[0]
+        base_indent = len(first_line) - len(first_line.lstrip())
 
-                # Add lines before the closing fence
-                lines = current_block.split("\n")
-                final_lines = []
-                for line in lines:
-                    if self.FENCE_END_RE.match(line):
-                        break
-                    final_lines.append(line)
+        if base_indent == 0:
+            return code
 
-                if final_lines:
-                    final_content = "\n".join(final_lines)
-                    code_parts.append(final_content)
-
-                # Create the <pre><code> structure
-                pre_elem = etree.SubElement(parent, "pre")
-                code_elem = etree.SubElement(pre_elem, "code")
-
-                # Add language class if specified
-                if language:
-                    code_elem.set("class", f"language-{language}")
-
-                # Join code parts with empty lines to restore consumed empty lines
-                # Each block boundary represents a consumed empty line in the original
-                code_content = "\n\n".join(code_parts).rstrip()
-                code_elem.text = code_content
-
-                return True
+        # Remove base indentation from each line
+        lines = code.split("\n")
+        dedented_lines = []
+        for line in lines:
+            if line.startswith(" " * base_indent):
+                dedented_lines.append(line[base_indent:])
+            elif line.startswith("\t" * base_indent):
+                dedented_lines.append(line[base_indent:])
+            elif line.strip() == "":
+                # Preserve empty lines
+                dedented_lines.append("")
             else:
-                # This entire block is part of the code
-                blocks.pop(0)
-                code_parts.append(current_block)
+                # Line has less indentation than base, keep as is
+                dedented_lines.append(line.lstrip())
 
-        # If we get here, we didn't find a closing fence
-        # Put the blocks back and let normal processing handle it
-        blocks.insert(0, first_block)
-        for block in reversed(
-            code_parts[1:]
-        ):  # Skip the first part as it's part of first_block
-            blocks.insert(1, block)
+        return "\n".join(dedented_lines)
 
-        return False
+    def _create_code_html(self, code: str, language: str, marker_id: str) -> str:
+        """Create a simple marker for the code block.
+
+        Args:
+            code: The code content
+            language: The programming language (can be empty)
+            marker_id: Unique marker ID for retrieval
+
+        Returns:
+            Marker string that will be replaced by postprocessor
+        """
+        # Return a simple marker that the postprocessor will replace
+        return f"<!--{marker_id}-->"
+
+
+class CodeBlockPostprocessor(Postprocessor):
+    """Postprocessor that replaces code block markers with ANSI formatted code."""
+
+    def __init__(self, md: markdown.Markdown, renderer: ANSIRenderer):
+        """Initialize the postprocessor.
+
+        Args:
+            md: The Markdown instance
+            renderer: ANSI renderer for formatting code blocks
+        """
+        super().__init__(md)
+        self.renderer = renderer
+        self.code_blocks = getattr(md, "_code_blocks", {})
+
+    def run(self, text: str) -> str:
+        """Replace code block markers with ANSI formatted code.
+
+        Args:
+            text: The processed markdown text
+
+        Returns:
+            Text with code blocks rendered as ANSI
+        """
+        # Replace each marker with formatted code
+        for marker_id, block_data in self.code_blocks.items():
+            marker = f"<!--{marker_id}-->"
+            if marker in text:
+                code = block_data["code"]
+                lang = block_data["lang"]
+                formatted = self.renderer.code_block(code, lang)
+                text = text.replace(marker, formatted)
+
+        return text
 
 
 class ANSITreeProcessor(Treeprocessor):
@@ -311,6 +373,42 @@ class ANSITreeProcessor(Treeprocessor):
         self.renderer = renderer
         self.parent_map: Dict[etree.Element, etree.Element] = {}
         self.list_counters: Dict[etree.Element, int] = {}
+        self._setup_tag_formatters()
+
+    def _setup_tag_formatters(self):
+        """Set up tag formatting dispatch table."""
+        self._tag_formatters = {
+            # Text formatting
+            "strong": self._format_bold,
+            "b": self._format_bold,
+            "em": self._format_italic,
+            "i": self._format_italic,
+            "u": self._format_underline,
+            "del": self._format_strikethrough,
+            "s": self._format_strikethrough,
+            "code": self._format_code,
+            # Block elements
+            "pre": self._format_pre,
+            "blockquote": self._format_blockquote,
+            "hr": self._format_hr,
+            "p": self._format_paragraph,
+            # Links and media
+            "a": self._format_link,
+            "img": self._format_image,
+            # Lists
+            "li": self._format_list_item,
+            "ul": self._format_list_container,
+            "ol": self._format_list_container,
+            # Tables
+            "table": self._format_table,
+            "thead": self._format_table_element,
+            "tbody": self._format_table_element,
+            "td": self._format_table_element,
+            "th": self._format_table_element,
+            "tr": self._format_table_row,
+            # Other
+            "br": self._format_br,
+        }
 
     def run(self, root: etree.Element) -> None:
         """Process the element tree and convert to ANSI text."""
@@ -353,62 +451,98 @@ class ANSITreeProcessor(Treeprocessor):
 
     def _format_by_tag(self, tag: str, elem: etree.Element, content: str) -> str:
         """Format content based on HTML tag."""
-        # Text formatting tags
-        if tag in ("strong", "b"):
-            return self.renderer.bold(wrap(content))
-        elif tag in ("em", "i"):
-            return self.renderer.italic(wrap(content))
-        elif tag == "u":
-            return self.renderer.underline(wrap(content))
-        elif tag in ("del", "s"):
-            return self.renderer.strikethrough(wrap(content))
-        elif tag == "code":
-            # Check if this is inside a <pre> element (code block) or standalone (inline code)
-            parent = self.parent_map.get(elem)
-            if parent is not None and parent.tag.lower() == "pre":
-                # This is handled by the <pre> case, just return content
-                return content
-            else:
-                # This is inline code
-                return self.renderer.code_inline(content)
-
-        # Block elements
-        elif tag == "pre":
-            return self._format_code_block(elem, wrap(content))
-        elif self._is_header_tag(tag):
+        # Check for headers first (h1-h6)
+        if self._is_header_tag(tag):
             level = int(tag[1])
             return self.renderer.header(wrap(content), level)
-        elif tag == "blockquote":
-            return self.renderer.blockquote(wrap(content))
-        elif tag == "hr":
-            return self.renderer.horizontal_rule()
-        elif tag == "p":
-            return f"{wrap(content)}\n" if content.strip() else ""
 
-        # Links and media
-        elif tag == "a":
-            return self._format_link(elem, wrap(content))
-        elif tag == "img":
-            return self._format_image(elem)
+        # Use dispatch table for known tags
+        formatter = self._tag_formatters.get(tag)
+        if formatter:
+            return formatter(elem, content)
 
-        # Lists and tables
-        elif tag == "li":
-            return self._format_list_item(elem, wrap(content))
-        elif tag in ("ul", "ol"):
-            return wrap(content)
-        elif tag == "table":
-            return self._format_table(elem)
-        elif tag in ("thead", "tbody", "td", "th"):
-            return wrap(content)
-        elif tag == "tr":
-            # Table rows are handled by _format_table
-            return wrap(content)
+        # Default: return wrapped content
+        return wrap(content)
 
-        # Other elements
-        elif tag == "br":
-            return "\n"
-        else:
-            return wrap(content)
+    # Text formatting methods
+    def _format_bold(self, elem: etree.Element, content: str) -> str:
+        return self.renderer.bold(wrap(content))
+
+    def _format_italic(self, elem: etree.Element, content: str) -> str:
+        return self.renderer.italic(wrap(content))
+
+    def _format_underline(self, elem: etree.Element, content: str) -> str:
+        return self.renderer.underline(wrap(content))
+
+    def _format_strikethrough(self, elem: etree.Element, content: str) -> str:
+        return self.renderer.strikethrough(wrap(content))
+
+    def _format_code(self, elem: etree.Element, content: str) -> str:
+        """Format code - inline or block depending on parent."""
+        parent = self.parent_map.get(elem)
+        if parent is not None and parent.tag.lower() == "pre":
+            return content  # Handled by <pre> case
+        return self.renderer.code_inline(content)
+
+    # Block element methods
+    def _format_pre(self, elem: etree.Element, content: str) -> str:
+        return self._format_code_block(elem, wrap(content))
+
+    def _format_blockquote(self, elem: etree.Element, content: str) -> str:
+        return self.renderer.blockquote(wrap(content))
+
+    def _format_hr(self, elem: etree.Element, content: str) -> str:
+        return self.renderer.horizontal_rule()
+
+    def _format_paragraph(self, elem: etree.Element, content: str) -> str:
+        return f"{wrap(content)}\n" if content.strip() else ""
+
+    # List methods
+    def _format_list_container(self, elem: etree.Element, content: str) -> str:
+        return wrap(content)
+
+    def _format_list_item(self, elem: etree.Element, content: str) -> str:
+        """Format list item element, determining if it's ordered or unordered."""
+        parent = self.parent_map.get(elem)
+        if parent is None:
+            return self.renderer.list_item(wrap(content), ordered=False)
+
+        parent_tag = parent.tag.lower()
+        if parent_tag == "ol":
+            # Ordered list - track the index
+            if parent not in self.list_counters:
+                self.list_counters[parent] = 0
+            self.list_counters[parent] += 1
+            index = self.list_counters[parent]
+            return self.renderer.list_item(wrap(content), ordered=True, index=index)
+
+        # Unordered list or unknown parent
+        return self.renderer.list_item(wrap(content), ordered=False)
+
+    # Table methods
+    def _format_table_element(self, elem: etree.Element, content: str) -> str:
+        return wrap(content)
+
+    def _format_table_row(self, elem: etree.Element, content: str) -> str:
+        return wrap(content)
+
+    # Link and media methods
+    def _format_link(self, elem: etree.Element, content: str) -> str:
+        """Format link element."""
+        url = elem.get("href", "")
+        title = elem.get("title", "")
+        return self.renderer.link(wrap(content), url, title)
+
+    def _format_image(self, elem: etree.Element, content: str) -> str:
+        """Format image element."""
+        alt = elem.get("alt", "")
+        src = elem.get("src", "")
+        title = elem.get("title", "")
+        return self.renderer.image(alt, src, title)
+
+    # Other methods
+    def _format_br(self, elem: etree.Element, content: str) -> str:
+        return "\n"
 
     def _is_header_tag(self, tag: str) -> bool:
         """Check if tag is a header tag (h1-h6)."""
@@ -419,47 +553,13 @@ class ANSITreeProcessor(Treeprocessor):
         code_elem = elem.find("code")
         if code_elem is not None:
             language = code_elem.get("class", "").replace("language-", "")
-            return self.renderer.code_block(code_elem.text or "", language)
+            # Get the text content - ElementTree automatically unescapes HTML entities
+            code_text = code_elem.text or ""
+            return self.renderer.code_block(code_text, language)
         else:
             return self.renderer.code_block(content)
 
-    def _format_link(self, elem: etree.Element, content: str) -> str:
-        """Format link element."""
-        url = elem.get("href", "")
-        title = elem.get("title", "")
-        return self.renderer.link(content, url, title)
-
-    def _format_image(self, elem: etree.Element) -> str:
-        """Format image element."""
-        alt = elem.get("alt", "")
-        src = elem.get("src", "")
-        title = elem.get("title", "")
-        return self.renderer.image(alt, src, title)
-
-    def _format_list_item(self, elem: etree.Element, content: str) -> str:
-        """Format list item element, determining if it's ordered or unordered."""
-        parent = self.parent_map.get(elem)
-        if parent is None:
-            # No parent found, default to unordered
-            return self.renderer.list_item(content, ordered=False, index=1)
-
-        parent_tag = parent.tag.lower()
-        if parent_tag == "ol":
-            # Ordered list - need to track the index
-            if parent not in self.list_counters:
-                self.list_counters[parent] = 0
-
-            self.list_counters[parent] += 1
-            index = self.list_counters[parent]
-            return self.renderer.list_item(content, ordered=True, index=index)
-        elif parent_tag == "ul":
-            # Unordered list
-            return self.renderer.list_item(content, ordered=False, index=1)
-        else:
-            # Unknown parent, default to unordered
-            return self.renderer.list_item(content, ordered=False, index=1)
-
-    def _format_table(self, elem: etree.Element) -> str:
+    def _format_table(self, elem: etree.Element, content: str) -> str:
         """Format entire table element with proper column alignment."""
         rows = []
         has_header = False
@@ -502,13 +602,19 @@ class ANSIExtension(Extension):
         """Register the ANSI processors."""
         renderer = self.getConfig("renderer")
 
-        # Register the fenced code block processor (run before other block processors)
-        fenced_processor = FencedCodeBlockProcessor(md.parser)
-        md.parser.blockprocessors.register(fenced_processor, "fenced_code", 25)
+        # Register our fenced code preprocessor
+        # This runs before markdown splits text into blocks
+        fenced_preprocessor = FencedCodePreprocessor(md)
+        md.preprocessors.register(fenced_preprocessor, "fenced_code_block", 25)
 
-        # Register the tree processor (run last)
+        # Register the tree processor to convert HTML to ANSI
         tree_processor = ANSITreeProcessor(md, renderer)
         md.treeprocessors.register(tree_processor, "ansi", 0)
+
+        # Register the postprocessor to replace code block markers with ANSI
+        # This runs after the tree processor
+        code_postprocessor = CodeBlockPostprocessor(md, renderer)
+        md.postprocessors.register(code_postprocessor, "code_blocks", 15)
 
 
 # Convenience functions
